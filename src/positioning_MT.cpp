@@ -296,22 +296,30 @@ void make_Dtbase()
     img_dtbase.shrink_to_fit();
 
     int count = 0;
-    for (int  i = position[position.size() - 1] - 3; i < position[position.size() - 1] + 3; i++)
+    std::cout << "start position " << std::endl;
+    for (int i = position[position.size() - 1] - 3; i < position[position.size() - 1] + 3; i++)
     {
         path = make_path(dir, dir_num, i, tag);
         img_dtbase.resize(count + 1);
-        cvt_LBP(cv::imread(path,0), dst);
+        cvt_LBP(cv::imread(path, 0), dst);
         img_dtbase[count] = dst;
         count++;
     }
-    
 
     std::cout << "make_Dtbase() end" << std::endl;
 }
 
-void update_Dtbase(){
-    
+void update_Dtbase()
+{
+    std::string path;
+    std::string dir = "images/Test0";
+    int dir_num = 0;
+    std::string tag;
+    path = make_path(dir, dir_num, position[position.size() - 1], tag);
+    img_dtbase.erase(img_dtbase.begin());
+    img_dtbase.push_back(cv::imread(path, 0));
 }
+
 void position_check()
 {
     std::cout << "position_check() start" << std::endl;
@@ -364,7 +372,7 @@ void position_check()
         position[position_size];
         if (position_size > 0)
         {
-            if (position[position_size] - position[position_size - 1] > 2 || position[position_size] - position[position_size - 1] < 2)
+            if (position[position_size] - position[position_size - 1] > 2 || position[position_size] - position[position_size - 1] < -2)
             {
                 start_check++;
             }
@@ -375,11 +383,15 @@ void position_check()
         }
         position_size++;
 
-        if(start_check == 6){
+        if (start_check == 6)
+        {
             next_Dtbase++;
         }
 
         std::cout << "now locate " << result[result.size() - 1].num << std::endl;
+
+        update_Dtbase();
+
         clock_t end = clock();
         print_elapsed_time(begin, end);
 
