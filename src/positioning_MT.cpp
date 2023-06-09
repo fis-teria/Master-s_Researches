@@ -244,6 +244,7 @@ void read_image()
         std::cout << img_path << std::endl;
 
         cvt_LBP(cv::imread(img_path, 0), dst);
+        std::cout << "LBP" << std::endl;
         // std::lock_guard<std::mutex> lock(mtx_);
         src = dst;
         read_src++;
@@ -351,9 +352,12 @@ void position_check()
         }
         read_src = 0;
 
+        std::cout << "match position " << std::endl;
+
         clock_t begin = clock();
         for (int j = 0; j < img_dtbase.size(); j++)
         {
+            clock_t begin = clock();
             temp = img_dtbase[i].clone();
             // std::cout << get_src << std::endl;
             cv::matchTemplate(src, temp(cv::Range(temp.rows / 10, (9 * temp.rows) / 10), cv::Range(temp.cols / 10, (9 * temp.cols) / 10)), sl_tim, cv::TM_CCOEFF_NORMED);
@@ -363,6 +367,8 @@ void position_check()
             result[result_size].max = max_sl;
             result[result_size].num = j;
             result_size++;
+            clock_t end = clock();
+            print_elapsed_time(begin, end);
         }
 
         std::sort(result.begin(), result.end(), [](const resulT &alpha, const resulT &beta)
@@ -383,7 +389,7 @@ void position_check()
         }
         position_size++;
 
-        if (start_check == 6)
+        if (start_check == 10)
         {
             next_Dtbase++;
         }
@@ -395,6 +401,7 @@ void position_check()
         clock_t end = clock();
         print_elapsed_time(begin, end);
 
+        std::cout << "show" << std::endl;
         cv::imshow("get_src", cv::imread(make_tpath("images/Test0", 0, result[result.size() - 1].num, ".jpg")));
         cv::waitKey(10);
         get_src++;
