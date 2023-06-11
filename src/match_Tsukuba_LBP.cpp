@@ -345,6 +345,7 @@ int main(int argc, char **argv)
     std::string location_path;
     location_path = "gra/r_file/location_LBP.csv";
     //std::ofstream outputfile(location_path, std::ios::app);
+    std::ofstream ofs("logs/location.txt");
     for (int i = load_num; i < 4546; i++)
     {
         std::cout << "start positioning " << i << " times" << std::endl;
@@ -357,6 +358,7 @@ int main(int argc, char **argv)
         clock_t begin = clock();
         now_locate = position_Check(src, path, i);
         std::cout << now_locate << std::endl;
+        ofs << now_locate <<std::endl;
         clock_t end = clock();
         print_elapsed_time(begin, end);
 
@@ -380,6 +382,7 @@ int main(int argc, char **argv)
         //  cv::waitKey(0);
        //save(i, execute_num);
     }
+    ofs.close();
     //outputfile.close();
     //*/
     return 0;

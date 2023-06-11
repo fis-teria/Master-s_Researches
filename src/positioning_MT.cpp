@@ -14,6 +14,24 @@
 #include <thread>
 #include <mutex>
 
+struct resulT
+{
+    double max;
+    int num;
+};
+
+struct location
+{
+    double px;
+    double py;
+};
+
+struct Database
+{
+    cv::Mat img;
+    std::string path;
+};
+
 // Thread Flags
 std::mutex mtx_;
 int thread_finish = 0;
@@ -27,7 +45,7 @@ int make_DB = 0;
 // get camera images
 cv::Mat src;
 // get Pre-run images Dataase
-std::vector<cv::Mat> img_dtbase;
+std::vector<Database> img_dtbase;
 int start_check = 0;
 
 // get Position result
@@ -35,18 +53,6 @@ std::vector<int> position;
 int position_size = 0;
 // output
 std::string SAVE = "SAVE_Postion.txt";
-
-struct resulT
-{
-    double max;
-    int num;
-};
-
-struct location
-{
-    double px;
-    double py;
-};
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -274,14 +280,23 @@ void make_Dtbase()
     std::string tag;
     cv::Mat dst;
     tag = ".jpg";
-    for (int i = 0; i < 200; i++)
+    std::string numf = "images/Test0" + std::to_string(dir_num) + "/num.txt";
+    std::string line;
+    int num = 0;
+    std::ifstream ifs(numf);
+    while (getline(ifs, line))
+    {
+        num = std::stoi(line);
+    }
+    for (int i = 0; i < num / 2; i++)
     {
         path = make_path(dir, dir_num, i, tag);
-        // std::cout << path << std::endl;
+        std::cout << path << std::endl;
         cvt_LBP(cv::imread(path, 0), dst);
         img_dtbase.resize(i + 1);
-        img_dtbase[i] = dst;
-        if (img_dtbase[i].empty())
+        img_dtbase[i].img = dst;
+        img_dtbase[i].path = path;
+        if (img_dtbase[i].img.empty())
         {
             std::cout << "nothing to image " << path << std::endl;
         }
@@ -302,10 +317,24 @@ void make_Dtbase()
     {
         path = make_path(dir, dir_num, i, tag);
         img_dtbase.resize(count + 1);
+        std::cout << path << std::endl;
         cvt_LBP(cv::imread(path, 0), dst);
-        img_dtbase[count] = dst;
+        if (dst.empty())
+        {
+            std::cout << "error" << std::endl;
+        }
+        img_dtbase[i].img = dst;
+        std::cout << img_dtbase[i].img.empty() <<std::endl;
+        img_dtbase[i].path = path;
+        std::cout << "new " << img_dtbase[count].img.rows << std::endl;
+        if (img_dtbase[count].img.empty())
+        {
+            std::cout << "error" << std::endl;
+        }
+
         count++;
     }
+    make_DB++;
 
     std::cout << "make_Dtbase() end" << std::endl;
 }
@@ -315,16 +344,18 @@ void update_Dtbase()
     std::string path;
     std::string dir = "images/Test0";
     int dir_num = 0;
-    std::string tag;
+    std::string tag = ".jpg";
     path = make_path(dir, dir_num, position[position.size() - 1], tag);
     img_dtbase.erase(img_dtbase.begin());
-    img_dtbase.push_back(cv::imread(path, 0));
+    img_dtbase[img_dtbase.size() - 1].img = cv::imread(path, 0);
+    img_dtbase[img_dtbase.size() - 1].path = path;
 }
 
 void position_check()
 {
     std::cout << "position_check() start" << std::endl;
     std::ifstream ifs("images/Test01/num.txt");
+    std::ofstream ofs("logs/locationMT.txt");
     std::string line;
     std::vector<int> check;
     std::vector<resulT> result;
@@ -355,57 +386,88 @@ void position_check()
         std::cout << "match position " << std::endl;
 
         clock_t begin = clock();
+        std::cout << img_dtbase.size() << std::endl;
         for (int j = 0; j < img_dtbase.size(); j++)
         {
-            clock_t begin = clock();
-            temp = img_dtbase[i].clone();
+            // clock_t begin = clock();
+            if (img_dtbase[j].img.empty())
+            {
+                std::cout << "not found images" << std::endl;
+            }
+            std::cout << img_dtbase[j].path << std::endl;
+            temp = img_dtbase[j].img;
+            if (temp.empty())
+            {
+                std::cout << "error" << std::endl;
+            }
             // std::cout << get_src << std::endl;
             cv::matchTemplate(src, temp(cv::Range(temp.rows / 10, (9 * temp.rows) / 10), cv::Range(temp.cols / 10, (9 * temp.cols) / 10)), sl_tim, cv::TM_CCOEFF_NORMED);
             cv::minMaxLoc(sl_tim, &min_sl, &max_sl, &p_min_sl, &p_max_sl);
+            // std::cout << "template matching" << std::endl;
 
             result.resize(result_size + 1);
             result[result_size].max = max_sl;
+            // std::cout << result[result_size].max << std::endl;
             result[result_size].num = j;
             result_size++;
-            clock_t end = clock();
-            print_elapsed_time(begin, end);
+            // clock_t end = clock();
+            // print_elapsed_time(begin, end);
         }
 
         std::sort(result.begin(), result.end(), [](const resulT &alpha, const resulT &beta)
                   { return alpha.max < beta.max; });
 
         position.resize(position_size + 1);
-        position[position_size];
-        if (position_size > 0)
+        position[position_size] = result[result.size() - 1].num;
+
+        int update = 0;
+        if (update == 0)
         {
-            if (position[position_size] - position[position_size - 1] > 2 || position[position_size] - position[position_size - 1] < -2)
+            if (start_check != 10)
             {
-                start_check++;
+                if (position_size > 0)
+                {
+                    if (position[position_size] - position[position_size - 1] < 2 && position[position_size] - position[position_size - 1] > -2)
+                    {
+                        std::cout << position[position_size] - position[position_size - 1] << " " << position[position_size] - position[position_size - 1] << std::endl;
+                        std::cout << "add start_check" << std::endl;
+                        start_check++;
+                    }
+                    else
+                    {
+                        start_check = 0;
+                    }
+                }
             }
-            else
+            else if (start_check == 10)
             {
-                start_check = 0;
+                next_Dtbase++;
+                while (make_DB == 0)
+                {
+                }
+                std::cout << "update" << std::endl;
+                update++;
             }
+        }
+        else
+        {
+            update_Dtbase();
         }
         position_size++;
-
-        if (start_check == 10)
-        {
-            next_Dtbase++;
-        }
-
         std::cout << "now locate " << result[result.size() - 1].num << std::endl;
-
-        update_Dtbase();
+        ofs << result[result.size() - 1].num << std::endl;
 
         clock_t end = clock();
         print_elapsed_time(begin, end);
 
         std::cout << "show" << std::endl;
-        cv::imshow("get_src", cv::imread(make_tpath("images/Test0", 0, result[result.size() - 1].num, ".jpg")));
+        cv::imshow("get_result", cv::imread(make_tpath("images/Test0", 0, result[result.size() - 1].num, ".jpg")));
+        cv::imshow("get_src", cv::imread(make_tpath("images/Test0", 1, i, ".jpg")));
         cv::waitKey(10);
         get_src++;
     }
+
+    ofs.close();
 
     std::cout << "position_check() end" << std::endl;
 }
