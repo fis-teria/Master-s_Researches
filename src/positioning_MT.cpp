@@ -284,6 +284,7 @@ void make_Dtbase()
     std::string line;
     int num = 0;
     std::ifstream ifs(numf);
+    Database _DB;
     while (getline(ifs, line))
     {
         num = std::stoi(line);
@@ -293,10 +294,15 @@ void make_Dtbase()
         path = make_path(dir, dir_num, i, tag);
         std::cout << path << std::endl;
         cvt_LBP(cv::imread(path, 0), dst);
+        _DB.img = dst;
+        _DB.path = path;
+        img_dtbase.push_back(_DB);
+        /*
         img_dtbase.resize(i + 1);
         img_dtbase[i].img = dst;
         img_dtbase[i].path = path;
-        if (img_dtbase[i].img.empty())
+        */
+       if (img_dtbase[i].img.empty())
         {
             std::cout << "nothing to image " << path << std::endl;
         }
@@ -308,12 +314,12 @@ void make_Dtbase()
     {
     }
 
-    img_dtbase.clear();
-    img_dtbase.shrink_to_fit();
-
+    img_dtbase.erase(img_dtbase.begin(), img_dtbase.begin() + position.back() - 10);
+    img_dtbase.erase(img_dtbase.begin() + position.back() + 10, img_dtbase.end());
     int count = 0;
     std::cout << "start position " << std::endl;
-    for (int i = position[position.size() - 1] - 3; i < position[position.size() - 1] + 3; i++)
+    /*
+    for (int i = position[position.size() - 1] - 5; i < position[position.size() - 1] + 5; i++)
     {
         path = make_path(dir, dir_num, i, tag);
         img_dtbase.resize(count + 1);
@@ -321,19 +327,30 @@ void make_Dtbase()
         cvt_LBP(cv::imread(path, 0), dst);
         if (dst.empty())
         {
-            std::cout << "error" << std::endl;
+            std::cout << "dst error" << std::endl;
         }
+        _DB.img = dst;
+        if (_DB.img.empty())
+        {
+            std::cout << "_DB error" << std::endl;
+        }
+
+        _DB.path = path;
+        img_dtbase.push_back(_DB);
+        
         img_dtbase[i].img = dst;
         std::cout << img_dtbase[i].img.empty() <<std::endl;
         img_dtbase[i].path = path;
         std::cout << "new " << img_dtbase[count].img.rows << std::endl;
+        
         if (img_dtbase[count].img.empty())
         {
-            std::cout << "error" << std::endl;
+            std::cout << "img_dtbase error" << std::endl;
         }
 
         count++;
     }
+    */
     make_DB++;
 
     std::cout << "make_Dtbase() end" << std::endl;
