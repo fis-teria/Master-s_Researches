@@ -289,7 +289,7 @@ void make_Dtbase()
     {
         num = std::stoi(line);
     }
-    for (int i = 0; i < num / 2; i++)
+    for (int i = 0; i < num; i++)
     {
         path = make_path(dir, dir_num, i, tag);
         std::cout << path << std::endl;
@@ -302,7 +302,7 @@ void make_Dtbase()
         img_dtbase[i].img = dst;
         img_dtbase[i].path = path;
         */
-       if (img_dtbase[i].img.empty())
+        if (img_dtbase[i].img.empty())
         {
             std::cout << "nothing to image " << path << std::endl;
         }
@@ -313,12 +313,12 @@ void make_Dtbase()
     while (next_Dtbase != 1)
     {
     }
+    /*
 
     img_dtbase.erase(img_dtbase.begin(), img_dtbase.begin() + position.back() - 10);
     img_dtbase.erase(img_dtbase.begin() + position.back() + 10, img_dtbase.end());
     int count = 0;
     std::cout << "start position " << std::endl;
-    /*
     for (int i = position[position.size() - 1] - 5; i < position[position.size() - 1] + 5; i++)
     {
         path = make_path(dir, dir_num, i, tag);
@@ -337,12 +337,12 @@ void make_Dtbase()
 
         _DB.path = path;
         img_dtbase.push_back(_DB);
-        
+
         img_dtbase[i].img = dst;
         std::cout << img_dtbase[i].img.empty() <<std::endl;
         img_dtbase[i].path = path;
         std::cout << "new " << img_dtbase[count].img.rows << std::endl;
-        
+
         if (img_dtbase[count].img.empty())
         {
             std::cout << "img_dtbase error" << std::endl;
@@ -362,10 +362,14 @@ void update_Dtbase()
     std::string dir = "images/Test0";
     int dir_num = 0;
     std::string tag = ".jpg";
+    Database _DB;
+    cv::Mat dst;
     path = make_path(dir, dir_num, position[position.size() - 1], tag);
     img_dtbase.erase(img_dtbase.begin());
-    img_dtbase[img_dtbase.size() - 1].img = cv::imread(path, 0);
-    img_dtbase[img_dtbase.size() - 1].path = path;
+    cvt_LBP(cv::imread(path, 0), dst);
+    _DB.img = dst;
+    _DB.path = path;
+    img_dtbase.push_back(_DB);
 }
 
 void position_check()
@@ -382,6 +386,8 @@ void position_check()
     cv::Point p_min_sl, p_max_sl;
     int num = 0;
     cv::Mat temp;
+    int update = 0;
+    int matching_start, matching_end;
     while (getline(ifs, line))
     {
         num = std::stoi(line);
@@ -392,6 +398,9 @@ void position_check()
     {
     }
     make_DB = 0;
+
+    matching_start = 0;
+    matching_end = img_dtbase.size();
 
     for (int i = 0; i < num; i++)
     {
@@ -404,14 +413,15 @@ void position_check()
 
         clock_t begin = clock();
         std::cout << img_dtbase.size() << std::endl;
-        for (int j = 0; j < img_dtbase.size(); j++)
+
+        for (int j = matching_start; j < matching_end; j++)
         {
             // clock_t begin = clock();
             if (img_dtbase[j].img.empty())
             {
                 std::cout << "not found images" << std::endl;
             }
-            std::cout << img_dtbase[j].path << std::endl;
+            // std::cout << img_dtbase[j].path << std::endl;
             temp = img_dtbase[j].img;
             if (temp.empty())
             {
@@ -437,7 +447,6 @@ void position_check()
         position.resize(position_size + 1);
         position[position_size] = result[result.size() - 1].num;
 
-        int update = 0;
         if (update == 0)
         {
             if (start_check != 10)
@@ -458,18 +467,16 @@ void position_check()
             }
             else if (start_check == 10)
             {
-                next_Dtbase++;
-                while (make_DB == 0)
-                {
-                }
-                std::cout << "update" << std::endl;
                 update++;
             }
         }
         else
         {
-            update_Dtbase();
+            matching_start = position.back() - 10 + update;
+            matching_end = position.back() + 10 + update;
+            update++;
         }
+
         position_size++;
         std::cout << "now locate " << result[result.size() - 1].num << std::endl;
         ofs << result[result.size() - 1].num << std::endl;
