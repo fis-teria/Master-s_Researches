@@ -372,6 +372,30 @@ void update_Dtbase()
     img_dtbase.push_back(_DB);
 }
 
+std::string zero_format(int var){
+    std::string back;
+    if (var < 10)
+    {
+        back = "00000" + std::to_string(var);
+        return back;
+    }
+    else if (var < 100)
+    {
+        back = "0000" + std::to_string(var);
+        return back;
+    }
+    else if (var < 1000)
+    {
+        back = "000" + std::to_string(var);
+        return back;
+    }
+    else if (var < 10000)
+    {
+        back = "00" + std::to_string(var);
+        return back;
+    }
+}
+
 void position_check()
 {
     std::cout << "position_check() start" << std::endl;
@@ -414,6 +438,9 @@ void position_check()
         clock_t begin = clock();
         std::cout << img_dtbase.size() << std::endl;
 
+        //std::string output_CSV = "logs/positioning_CSV/" + zero_format(i) + ".csv";
+       // std::ofstream outfs(output_CSV);
+
         for (int j = matching_start; j < matching_end; j++)
         {
             // clock_t begin = clock();
@@ -434,15 +461,20 @@ void position_check()
 
             result.resize(result_size + 1);
             result[result_size].max = max_sl;
+            //outfs << j << "," << result[result_size].max << std::endl;
             // std::cout << result[result_size].max << std::endl;
             result[result_size].num = j;
+            //std::cout << result[result_size].num << std::endl;
+
             result_size++;
             // clock_t end = clock();
             // print_elapsed_time(begin, end);
         }
+        //outfs.close();
 
         std::sort(result.begin(), result.end(), [](const resulT &alpha, const resulT &beta)
                   { return alpha.max < beta.max; });
+
 
         position.resize(position_size + 1);
         position[position_size] = result[result.size() - 1].num;
@@ -478,7 +510,7 @@ void position_check()
         }
 
         position_size++;
-        std::cout << "now locate " << result[result.size() - 1].num << std::endl;
+        std::cout << "now locate " << position.back() << std::endl;
         ofs << result[result.size() - 1].num << std::endl;
 
         clock_t end = clock();
