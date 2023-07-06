@@ -55,10 +55,10 @@ int position_size = 0;
 // output
 std::string SAVE = "SAVE_Postion.txt";
 // dir name
-std::string dir = "images/Tsukuba0";
-std::string tag = ".png";
+std::string dir = "images/Test0";
+std::string tag = ".jpg";
 int DB_dir_num = 0;
-int Cam_dir_num = 2;
+int Cam_dir_num = 1;
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -295,6 +295,7 @@ void make_Dtbase()
     for (int i = 0; i < num; i++)
     {
         path = make_tpath(dir, DB_dir_num, i, tag);
+        if(i %100 == 0)
         std::cout << path << std::endl;
         cv::resize(cv::imread(path, 0), resrc, cv::Size(), 0.1, 0.1);
         cvt_LBP(resrc, dst);
@@ -310,7 +311,7 @@ void make_Dtbase()
         {
             std::cout << "nothing to image " << path << std::endl;
         }
-        if(i>1000){
+        if(i > 400){
             make_DB = 1;
         }
     }
@@ -424,6 +425,8 @@ void position_check()
     cv::Mat temp;
     int update = 0;
     int matching_start, matching_end;
+    int base_num = 0;
+
     while (getline(ifs, line))
     {
         num = std::stoi(line);
@@ -501,7 +504,7 @@ void position_check()
             {
                 if (position_size > 0)
                 {
-                    if (position[position_size] - position[position_size - 1] < 2 && position[position_size] - position[position_size - 1] > -2)
+                    if (position[position_size] - position[position_size - 1] <= 3 && position[position_size] - position[position_size - 1] >= -3)
                     {
                         std::cout << position[position_size] - position[position_size - 1] << " " << position[position_size] - position[position_size - 1] << std::endl;
                         std::cout << "add start_check" << std::endl;
@@ -515,13 +518,14 @@ void position_check()
             }
             else if (start_check == 10)
             {
+                base_num = position.back();
                 update++;
             }
         }
         else
         {
-            matching_start = position.back() - 40;
-            matching_end = position.back() + 40;
+            matching_start = position.back() - 20;
+            matching_end = position.back() + 20;
         }
 
         position_size++;
