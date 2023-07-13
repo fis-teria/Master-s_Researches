@@ -55,10 +55,10 @@ int position_size = 0;
 // output
 std::string SAVE = "SAVE_Postion.txt";
 // dir name
-std::string dir = "images/Test0";
-std::string tag = ".jpg";
+std::string dir = "images/Tsukuba0";
+std::string tag = ".png";
 int DB_dir_num = 0;
-int Cam_dir_num = 1;
+int Cam_dir_num = 2;
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
