@@ -51,10 +51,9 @@ std::string make_tpath(std::string dir, int dir_num, int var, std::string tag)
     }
 }
 
-int main(int argc, const char *argv[])
-{
+int main(){
 
-    std::string numf = dir + std::to_string(Cam_dir_num) + "/num.txt";
+        std::string numf = dir + std::to_string(Cam_dir_num) + "/num.txt";
     std::string line;
     int num = 0;
     std::ifstream ifs(numf);
@@ -64,36 +63,32 @@ int main(int argc, const char *argv[])
     }
     std::cout << "start" << std::endl;
     std::cout << num << std::endl;
-    for (int i = 0; i < num; i++)
+    for (int i = 1; i < num; i++)
     {
         clock_t begin = clock();
         std::string path = make_tpath(dir, 0, i, tag);
+        std::string _path = make_tpath(dir, 0, i-1, tag);
         std::cout << path << std::endl;
-        cv::Mat img = cv::imread(path, 1);
+        cv::Mat img = cv::imread(path, 0);
         if (img.empty())
             return -1;
+        cv::Mat _img = cv::imread(_path, 0);
+        if (_img.empty())
+            return -1;
 
-        cv::HOGDescriptor hog;
-        cv::Mat gray_img;
-        cv::Mat small;
-        std::vector<cv::Rect> found;
+        cv::Mat diff_image;
+        cv::absdiff(img, _img, diff_image);
+        cv::Mat back;
+        cv::absdiff(img, diff_image, back);
 
-        cv::resize(img, small, cv::Size(), 0.3, 0.3);
-        cv::cvtColor(small, gray_img, cv::COLOR_BGR2GRAY);
-        hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
-        hog.detectMultiScale(gray_img, found, 0, cv::Size(8, 8), cv::Size(), 1.05, 2, false);
-
-        for (int i = 0; i < found.size(); i++)
-        {
-            cv::Rect r = found[i];
-            rectangle(small, r.tl(), r.br(), cv::Scalar(0, 255, 0), 2);
-        }
         clock_t end = clock();
         print_elapsed_time(begin, end);
 
-        cv::imshow("hog", small);
+        cv::imshow("hog", img);
+        cv::imshow("diff", diff_image);
+        cv::imshow("back", back);
         // cv::imwrite("output.jpg", img);
-        cv::waitKey(10);
+        cv::waitKey(0);
     }
 
     return 0;
