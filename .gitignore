@@ -1,2 +1,16 @@
-build/
+build/CMakeFiles
+build/images
+build/logs
+build/Makefile
+!build/camera
+build/calibration
+build/cmake_install.cmake
+build/CMakeCache.txt
+build/hog_detector
+build/match_Tsukuba_LBP
+build/positioning_MT
+build/stereo_camera
+build/sub_image
+build/test
+
 !.gitignore

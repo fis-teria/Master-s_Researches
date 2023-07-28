@@ -63,11 +63,12 @@ int main(){
     }
     std::cout << "start" << std::endl;
     std::cout << num << std::endl;
-    for (int i = 1; i < num; i++)
+    for (int i = 2; i < num; i++)
     {
         clock_t begin = clock();
         std::string path = make_tpath(dir, 0, i, tag);
         std::string _path = make_tpath(dir, 0, i-1, tag);
+        std::string _path_ = make_tpath(dir, 0, i-2, tag);
         std::cout << path << std::endl;
         cv::Mat img = cv::imread(path, 0);
         if (img.empty())
@@ -75,20 +76,27 @@ int main(){
         cv::Mat _img = cv::imread(_path, 0);
         if (_img.empty())
             return -1;
+        cv::Mat _img_ = cv::imread(_path_, 0);
+        if (_img.empty())
+            return -1;
 
         cv::Mat diff_image;
         cv::absdiff(img, _img, diff_image);
+        cv::Mat diff_image2;
+        cv::absdiff(_img, _img_, diff_image2);
+        cv::Mat diff;
+        cv::absdiff(diff_image, diff_image2, diff);
         cv::Mat back;
-        cv::absdiff(img, diff_image, back);
+        cv::absdiff(img, diff, back);
 
         clock_t end = clock();
         print_elapsed_time(begin, end);
 
         cv::imshow("hog", img);
-        cv::imshow("diff", diff_image);
+        cv::imshow("diff", diff);
         cv::imshow("back", back);
         // cv::imwrite("output.jpg", img);
-        cv::waitKey(0);
+        cv::waitKey(10);
     }
 
     return 0;
