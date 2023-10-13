@@ -12,5 +12,5 @@ build/positioning_MT
 build/stereo_camera
 build/sub_image
 build/test
-
+build
 !.gitignore
