@@ -199,66 +199,79 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
 
     // first step
     // step distance round search
+    std::cout << "origin_x " << origin_x << " origin_y " << origin_y << std::endl;
+    std::cout << "first step" << std::endl;
+    std::cout << "step distance round search" << std::endl;
     for (int x = k; x <= end_x; x += step)
     {
         for (int y = l; y <= end_y; y += step)
         {
-            match_Result.resize(BM_size + 1);
-            match_Result[BM_size].x = x;
-            match_Result[BM_size].y = y;
-            std::cout << x << " " << end_x << " " << y << std::endl;
-            rect = src.clone();
-            cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
-            cv::imshow("dd", rect);
-            const int key = cv::waitKey(10);
-
-            if (x != origin_x && y != origin_y)
+            if (x == origin_x && y == origin_y)
             {
+                continue;
+            }
+            else
+            {
+                std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+                match_Result.resize(BM_size + 1);
+                match_Result[BM_size].x = x;
+                match_Result[BM_size].y = y;
+                rect = src.clone();
+                cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
+                cv::imshow("dd", rect);
+                const int key = cv::waitKey(10);
+
+                std::cout << "start block matching" << std::endl;
                 for (int i = 0; i < block.cols; i++)
                 {
                     for (int j = 0; j < block.rows; j++)
                     {
-                        if (x + i >= 0 && y + j >= 0 && y + j < block.rows && x + i < block.cols)
+                        if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                         {
-                            //std::cout << x + i << " " << y + j << " " << src.at<unsigned char>(y + j, x + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
                             sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
+                match_Result[BM_size].sam = sam;
+                std::cout << "sam " << sam << std::endl;
+                sam = 0;
+                BM_size++;
             }
-            match_Result[BM_size].sam = sam;
-            std::cout << sam << std::endl;
-            sam = 0;
-            BM_size++;
         }
     }
 
     // origin round search
+    std::cout << "origin round search" << std::endl;
     for (int x = origin_x - 1; x <= origin_x + 1; x++)
     {
         for (int y = origin_y - 1; y <= origin_y + 1; y++)
         {
             if (x >= 0 && y >= 0 && x <= src.cols && y <= src.rows)
             {
+                std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = x;
                 match_Result[BM_size].y = y;
-                std::cout << x << " " << end_x << " " << y << std::endl;
                 rect = src.clone();
                 cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
                 cv::imshow("dd", rect);
                 const int key = cv::waitKey(10);
 
+                std::cout << "start block matching" << std::endl;
                 for (int i = 0; i < block.cols; i++)
                 {
                     for (int j = 0; j < block.rows; j++)
                     {
-                        if (y + j < block.rows && x + i < block.cols)
+                        if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
+                        {
+                            // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
                             sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                        }
                     }
                 }
                 match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
+                std::cout << "sam " << sam << std::endl;
                 sam = 0;
                 BM_size++;
             }
@@ -268,50 +281,59 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
               { return alpha.sam < beta.sam; });
     std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
 
-
     int sstep = step / 2;
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
+    int tx = origin_x;
+    int ty = origin_y;
     match_Result.resize(0);
     BM_size = 0;
 
-    // second steps
-    if (abs(sx - origin_x) > 1 || abs(sy - origin_y) > 1)
+    // second steps and more
+    if ((sx - tx) * (sx - tx) + (sy - ty) * (sy - ty) > 2)
     {
         std::cout << "far distance" << std::endl;
         for (int x = sx - sstep; x <= sx + sstep; x += sstep)
         {
             for (int y = sy - sstep; y <= sy + sstep; y += sstep)
             {
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = x;
-                match_Result[BM_size].y = y;
-                std::cout << x << " " << end_x << " " << y << std::endl;
-                rect = src.clone();
-                cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
-                cv::imshow("dd", rect);
-                const int key = cv::waitKey(10);
-
-                if (x != origin_x && y != origin_y)
+                if (x == origin_x && y == origin_y)
                 {
+                    continue;
+                }
+                else
+                {
+                    std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = x;
+                    match_Result[BM_size].y = y;
+                    rect = src.clone();
+                    cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
+                    cv::imshow("dd", rect);
+                    const int key = cv::waitKey(10);
+
+                    std::cout << "start block matching" << std::endl;
                     for (int i = 0; i < block.cols; i++)
                     {
                         for (int j = 0; j < block.rows; j++)
                         {
-                            if (x + i >= 0 && y + j >= 0 && y + j < block.rows && x + i < block.cols)
+                            if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                             {
-                                //std::cout << x + i << " " << y + j << " " << src.at<unsigned char>(y + j, x + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
                                 sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
+                    match_Result[BM_size].sam = sam;
+                    std::cout << "sam " << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
                 }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
             }
         }
+        std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
+                  { return alpha.sam < beta.sam; });
+        std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
     }
     else
     {
@@ -327,22 +349,20 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
         {
             if (abs(sy - origin_y) < 0)
             {
+                std::cout << "match left up" << std::endl;
                 // 1
                 // A
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -354,17 +374,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -376,17 +393,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -397,22 +411,20 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
             }
             else if (abs(sy - origin_y) == 0)
             {
+                std::cout << "match left" << std::endl;
                 // 2
                 // B
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -424,17 +436,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -446,17 +455,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -467,22 +473,20 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
             }
             else if (abs(sy - origin_y) > 0)
             {
+                std::cout << "match left down" << std::endl;
                 // 3
                 // D
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -494,17 +498,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -516,17 +517,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -540,22 +538,20 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
         {
             if (abs(sy - origin_y) < 0)
             {
+                std::cout << "match up" << std::endl;
                 // 4
                 // P
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -567,17 +563,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -589,17 +582,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -610,25 +600,24 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
             }
             else if (abs(sy - origin_y) == 0)
             {
+                std::cout << "match second origin" << std::endl;
             }
             else if (abs(sy - origin_y) > 0)
             {
+                std::cout << "match down" << std::endl;
                 // 6
                 // F
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx - 1;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -640,17 +629,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -662,17 +648,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -686,22 +669,20 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
         {
             if (abs(sy - origin_y) < 0)
             {
+                std::cout << "match right up" << std::endl;
                 // 7
                 // N
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -713,17 +694,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -735,17 +713,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -756,22 +731,20 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
             }
             else if (abs(sy - origin_y) == 0)
             {
+                std::cout << " match right" << std::endl;
                 // 8
                 // L
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy - 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -783,17 +756,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -805,17 +775,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -826,22 +793,20 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
             }
             else if (abs(sy - origin_y) > 0)
             {
+                std::cout << "match right down" << std::endl;
                 // 9
                 // H
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -853,17 +818,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy + 1;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -875,17 +837,14 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = sx + 1;
                 match_Result[BM_size].y = sy;
-                if (sx != origin_x && sy != origin_y)
+                for (int i = 0; i < block.cols; i++)
                 {
-                    for (int i = 0; i < block.cols; i++)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        for (int j = 0; j < block.rows; j++)
+                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                         {
-                            if (sx + i >= 0 && sy + j >= 0 && sy + j < block.rows && sx + i < block.cols)
-                            {
-                                //std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                            }
+                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
@@ -895,9 +854,13 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                 BM_size++;
             }
         }
-
-        return;
+        std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
+                  { return alpha.sam < beta.sam; });
+        std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
     }
+
+    std::cout << "origin point (" << origin_x << " " << origin_y << ") -> first match(" << sx << " " << sy << ") -> second match(" << match_Result[0].x << " " << match_Result[0].y << ")" << std::endl;
+    return;
 }
 
 void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, int mode)
@@ -911,7 +874,8 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
         for (int y = b_size / 2; y < block.rows; y += b_size)
         {
             if (mode == 0)
-                NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+                    NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
         }
     }
 }
@@ -991,7 +955,7 @@ void xmlRead()
         // clock_t end = clock();
         // print_elapsed_time(begin, end);
 
-        block_Matching(f1g, f2g, 3, NTSS_GRAY);
+        block_Matching(f1g, f2g, 5, NTSS_GRAY);
         // cv::imshow("a", distort);
         // cv::imshow("b", distort2);
 
@@ -1006,10 +970,101 @@ void xmlRead()
     return;
 }
 
+void subMat()
+{
+    readXml xml00 = readXml("camera/out_camera_data00.xml");
+    readXml xml02 = readXml("camera/out_camera_data02.xml");
+    /*
+    for (int x = 0; x < xml00.camera_matrix.cols; x++)
+    {
+        for (int y = 0; y < xml00.camera_matrix.rows; y++)
+        {
+            std::cout << xml00.camera_matrix.at<double>(y, x) << " ";
+        }
+        std::cout << std::endl;
+    }
+    */
+    cv::VideoCapture cap(0); // デバイスのオープン
+                             // cap.open(0);//こっちでも良い．
+                             // capの画像の解像度を変える部分 word CaptureChange
+    cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
+    cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
+    cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
+    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+
+    if (!cap.isOpened()) // カメラデバイスが正常にオープンしたか確認．
+    {
+        // 読み込みに失敗したときの処理
+        return;
+    }
+
+    cv::VideoCapture cap2(2); // デバイスのオープン
+                              // cap.open(0);//こっちでも良い．
+                              // capの画像の解像度を変える部分 word CaptureChange
+    cap2.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
+    cap2.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
+    cap2.set(cv::CAP_PROP_BUFFERSIZE, 1);
+    cap2.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+
+    if (!cap2.isOpened()) // カメラデバイスが正常にオープンしたか確認．
+    {
+        // 読み込みに失敗したときの処理
+        return;
+    }
+
+    cv::Mat frame; // 取得したフレーム
+    cv::Mat distort;
+    cv::Mat matx, maty;
+
+    cv::Mat frame2; // 取得したフレーム
+    cv::Mat distort2;
+
+    cv::Mat matx2, maty2;
+    cv::initUndistortRectifyMap(xml00.camera_matrix, xml00.distcoeffs, cv::Mat(), xml00.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx, maty);
+    cv::initUndistortRectifyMap(xml02.camera_matrix, xml02.distcoeffs, cv::Mat(), xml02.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx2, maty2);
+
+    cv::Mat f1g, f2g;
+    // while (1) // 無限ループ
+    //{
+    cap >> frame;
+    cap2 >> frame2;
+    // cv::imshow("win", frame);   // 画像を表示．
+    // cv::imshow("win2", frame2); // 画像を表示．
+    // f1g.convertTo(f1g, CV_8U);
+    // std::cout << f1g << std::endl;
+    //  cvt_LBP(frame, distort);
+    //  cvt_LBP(frame2, distort2);
+    //   clock_t begin = clock();
+    //    cv::undistort(frame, distort, xml00.camera_matrix, xml00.distcoeffs);
+    //    cv::remap(distort, distort, matx, maty, cv::INTER_LANCZOS4);
+    //    cv::remap(distort2, distort2, matx2, maty2, cv::INTER_LANCZOS4);
+    cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
+    cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
+    cv::cvtColor(distort, f1g, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(distort2, f2g, cv::COLOR_BGR2GRAY);
+    // clock_t end = clock();
+    // print_elapsed_time(begin, end);
+
+    std::cout << (int)f1g.at<unsigned char>(24, 24) << " " << (int)f2g.at<unsigned char>(24, 24) << " " << abs(f1g.at<unsigned char>(24, 24) - f2g.at<unsigned char>(24, 24)) << std::endl;
+    cv::imshow("a", f1g);
+    cv::imshow("b", f2g);
+
+    const int key = cv::waitKey(0);
+    if (key == 'q' /*113*/) // qボタンが押されたとき
+    {
+        // break; // whileループから抜ける．
+    }
+    //}
+    cv::destroyAllWindows();
+
+    return;
+}
+
 int main()
 {
 
     // detective();
     xmlRead();
+    // subMat();
     return 0;
 }
