@@ -13,6 +13,9 @@
 #include <algorithm>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
+#include <deque>
+#include <functional>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <boost/foreach.hpp>
@@ -25,6 +28,273 @@ int Cam_dir_num = 2;
 
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
+
+constexpr size_t ThreadCount = 8;
+template <size_t Count>
+class worker_pool
+{
+public:
+    worker_pool()
+    {
+        int index = 0;
+        for (auto &inner : inner_workers_)
+        {
+            inner.initialize(this, index++);
+        }
+    }
+    ~worker_pool()
+    {
+        wait_until_idle();
+        request_termination();
+    };
+
+    template <typename F>
+    void run(F &&task)
+    {
+        auto current_thread_index = get_current_thread_index();
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            // インデックス-1はワーカー外スレッドを指す
+            if (current_thread_index == -1)
+            {
+                global_queue_.emplace_back(std::forward<F>(task));
+            }
+            else
+            {
+                inner_workers_[current_thread_index].push(std::forward<F>(task));
+            }
+        }
+        wakeup_all(current_thread_index);
+    }
+
+    void wait_until_idle()
+    {
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            cond_.wait(lock, [this]()
+                       { return global_queue_.empty() || is_requested_termination; });
+        }
+        for (auto &inner : inner_workers_)
+        {
+            inner.wait_until_idle();
+        }
+    }
+
+    void request_termination()
+    {
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            is_requested_termination = true;
+            cond_.notify_all();
+        }
+        for (auto &inner : inner_workers_)
+        {
+            inner.request_termination();
+        }
+    }
+
+    std::function<void()> steal_or_pull(int index)
+    {
+        for (int i = 0; i < Count; ++i)
+        {
+            if (i == index)
+            {
+                continue;
+            }
+            auto task = inner_workers_[i].steal();
+            if (!!task)
+            {
+                return std::move(task);
+            }
+        }
+
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (global_queue_.empty())
+        {
+            return {};
+        }
+
+        auto task = global_queue_.front();
+        global_queue_.pop_front();
+        cond_.notify_all();
+        return std::move(task);
+    }
+
+    void wakeup_all(int index)
+    {
+        int i = 0;
+        for (auto &inner : inner_workers_)
+        {
+            if (i != index)
+            {
+                inner.wakeup();
+            }
+            ++i;
+        }
+    }
+
+private:
+    class inner_worker
+    {
+    public:
+        inner_worker() : thread_([this]()
+                                 { proc_worker(); }) {}
+        ~inner_worker()
+        {
+            wait_until_idle();
+            request_termination();
+            if (thread_.joinable())
+            {
+                thread_.join();
+            }
+        }
+
+        void initialize(worker_pool *parent, int index)
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            parent_ = parent;
+            index_ = index;
+            cond_.notify_all();
+        }
+
+        template <typename F>
+        void push(F &&task)
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            local_queue_.emplace_back(task);
+        }
+
+        std::function<void()> steal()
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            if (local_queue_.empty())
+            {
+                return {};
+            }
+
+            auto task = local_queue_.front();
+            local_queue_.pop_front();
+            cond_.notify_all();
+            return std::move(task);
+        }
+
+        void wakeup()
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            cond_.notify_all();
+        }
+
+        void wait_until_idle()
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            cond_.wait(lock, [this]()
+                       { return (local_queue_.empty() && !current_task_) || is_requested_termination; });
+        }
+
+        void request_termination()
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            is_requested_termination = true;
+            cond_.notify_all();
+        }
+
+        std::thread::id get_thread_id() const
+        {
+            return thread_.get_id();
+        }
+
+    private:
+        void wait_initialize()
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            cond_.wait(lock, [this]()
+                       { return parent_ != nullptr && index_ >= 0; });
+        }
+
+        void proc_worker()
+        {
+            wait_initialize();
+
+            while (true)
+            {
+                bool is_assigned = false;
+                {
+                    // ローカルキュー末尾からの取り出しを優先する
+                    std::unique_lock<std::mutex> lock(mutex_);
+                    if (!local_queue_.empty())
+                    {
+                        current_task_ = local_queue_.back();
+                        local_queue_.pop_back();
+                        is_assigned = true;
+                    }
+                }
+                if (!is_assigned)
+                {
+                    auto task = parent_->steal_or_pull(index_);
+                    if (!task)
+                    {
+                        std::unique_lock<std::mutex> lock(mutex_);
+                        current_task_ = {};
+                        cond_.notify_all(); // 何も処理していないことを通知する
+                        cond_.wait(lock, [&]()
+                                   {
+                            // この述語内ではロックを取得しているはず
+                            if (is_requested_termination) {
+                                return true;
+                            }
+                            // steal_or_pullの時にロックを保持しているとデッドロックを起こす
+                            lock.unlock();
+                            auto task = parent_->steal_or_pull(index_);
+                            lock.lock();
+                            // current_task_の更新時に再度ロックを取得する
+                            current_task_ = std::move(task);
+                            return !!current_task_; });
+                        if (is_requested_termination)
+                        {
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        std::unique_lock<std::mutex> lock(mutex_);
+                        current_task_ = std::move(task);
+                    }
+                }
+                current_task_();
+            }
+        }
+
+        worker_pool *parent_{nullptr};
+        int index_{-1};
+        std::function<void()> current_task_{};
+        bool is_requested_termination{false};
+        std::thread thread_;
+        std::deque<std::function<void()>> local_queue_;
+        std::mutex mutex_;
+        std::condition_variable cond_;
+    };
+
+    int get_current_thread_index()
+    {
+        auto current_id = std::this_thread::get_id();
+        int index = 0;
+        for (auto &worker : inner_workers_)
+        {
+            if (current_id == worker.get_thread_id())
+            {
+                return index;
+            }
+            ++index;
+        }
+        return -1;
+    }
+
+    inner_worker inner_workers_[Count];
+    bool is_requested_termination{false};
+    std::deque<std::function<void()>> global_queue_;
+    std::mutex mutex_;
+    std::condition_variable cond_;
+};
 
 std::string make_tpath(std::string dir, int dir_num, int var, std::string tag)
 {
@@ -199,9 +469,9 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
 
     // first step
     // step distance round search
-    std::cout << "origin_x " << origin_x << " origin_y " << origin_y << std::endl;
-    std::cout << "first step" << std::endl;
-    std::cout << "step distance round search" << std::endl;
+    // std::cout << "origin_x " << origin_x << " origin_y " << origin_y << std::endl;
+    // std::cout << "first step" << std::endl;
+    // std::cout << "step distance round search" << std::endl;
     for (int x = k; x <= end_x; x += step)
     {
         for (int y = l; y <= end_y; y += step)
@@ -212,16 +482,17 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
             }
             else
             {
-                std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+                // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = x;
                 match_Result[BM_size].y = y;
-                rect = src.clone();
+                /*
+rect = src.clone();
                 cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
                 cv::imshow("dd", rect);
-                const int key = cv::waitKey(10);
+                const int key = cv::waitKey(10);*/
 
-                std::cout << "start block matching" << std::endl;
+                // std::cout << "start block matching" << std::endl;
                 for (int i = 0; i < block.cols; i++)
                 {
                     for (int j = 0; j < block.rows; j++)
@@ -234,7 +505,7 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                     }
                 }
                 match_Result[BM_size].sam = sam;
-                std::cout << "sam " << sam << std::endl;
+                // std::cout << "sam " << sam << std::endl;
                 sam = 0;
                 BM_size++;
             }
@@ -242,23 +513,24 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
     }
 
     // origin round search
-    std::cout << "origin round search" << std::endl;
+    // std::cout << "origin round search" << std::endl;
     for (int x = origin_x - 1; x <= origin_x + 1; x++)
     {
         for (int y = origin_y - 1; y <= origin_y + 1; y++)
         {
             if (x >= 0 && y >= 0 && x <= src.cols && y <= src.rows)
             {
-                std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+                // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = x;
                 match_Result[BM_size].y = y;
-                rect = src.clone();
+                /*
+rect = src.clone();
                 cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
                 cv::imshow("dd", rect);
-                const int key = cv::waitKey(10);
+                const int key = cv::waitKey(10);*/
 
-                std::cout << "start block matching" << std::endl;
+                // std::cout << "start block matching" << std::endl;
                 for (int i = 0; i < block.cols; i++)
                 {
                     for (int j = 0; j < block.rows; j++)
@@ -271,7 +543,7 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
                     }
                 }
                 match_Result[BM_size].sam = sam;
-                std::cout << "sam " << sam << std::endl;
+                // std::cout << "sam " << sam << std::endl;
                 sam = 0;
                 BM_size++;
             }
@@ -279,587 +551,599 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
     }
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sam < beta.sam; });
-    std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
 
-    int sstep = step / 2;
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
     int tx = origin_x;
     int ty = origin_y;
-    match_Result.resize(0);
-    BM_size = 0;
 
-    // second steps and more
-    if ((sx - tx) * (sx - tx) + (sy - ty) * (sy - ty) > 2)
+    // std::cout << "origin point (" << origin_x << " " << origin_y << ") -> first match(" << sx << " " << sy << ")";
+    //  second steps and more
+    for (int sstep = step / 2; sstep > 0; sstep /= 2)
     {
-        std::cout << "far distance" << std::endl;
-        for (int x = sx - sstep; x <= sx + sstep; x += sstep)
+        match_Result.resize(0);
+        BM_size = 0;
+        if ((sx - tx) * (sx - tx) + (sy - ty) * (sy - ty) > 2)
         {
-            for (int y = sy - sstep; y <= sy + sstep; y += sstep)
+            // std::cout << "far distance" << std::endl;
+            for (int x = sx - sstep; x <= sx + sstep; x += sstep)
             {
-                if (x == origin_x && y == origin_y)
+                for (int y = sy - sstep; y <= sy + sstep; y += sstep)
                 {
-                    continue;
-                }
-                else
-                {
-                    std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
-                    match_Result.resize(BM_size + 1);
-                    match_Result[BM_size].x = x;
-                    match_Result[BM_size].y = y;
-                    rect = src.clone();
-                    cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
-                    cv::imshow("dd", rect);
-                    const int key = cv::waitKey(10);
+                    if (x == origin_x && y == origin_y)
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+                        match_Result.resize(BM_size + 1);
+                        match_Result[BM_size].x = x;
+                        match_Result[BM_size].y = y;
+                        /*
+rect = src.clone();
+                        cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
+                        cv::imshow("dd", rect);
+                        const int key = cv::waitKey(10);*/
 
-                    std::cout << "start block matching" << std::endl;
+                        // std::cout << "start block matching" << std::endl;
+                        for (int i = 0; i < block.cols; i++)
+                        {
+                            for (int j = 0; j < block.rows; j++)
+                            {
+                                if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
+                                {
+                                    // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
+                                    sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                                }
+                            }
+                        }
+                        match_Result[BM_size].sam = sam;
+                        // std::cout << "sam " << sam << std::endl;
+                        sam = 0;
+                        BM_size++;
+                    }
+                }
+            }
+            std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
+                      { return alpha.sam < beta.sam; });
+            // std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+            // std::cout << " -> match(" << match_Result[0].x << " " << match_Result[0].y << ")";
+        }
+        else
+        {
+            // std::cout << "near distance" << std::endl;
+            /*
+                A P O N M
+                B 1 4 7 L
+                C 2 5 8 K
+                D 3 6 9 J
+                E F G H I
+            */
+            if (abs(sx - origin_x) < 0)
+            {
+                if (abs(sy - origin_y) < 0)
+                {
+                    // std::cout << "match left up" << std::endl;
+                    //  1
+                    //  A
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy - 1;
                     for (int i = 0; i < block.cols; i++)
                     {
                         for (int j = 0; j < block.rows; j++)
                         {
-                            if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
-                                // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
                     match_Result[BM_size].sam = sam;
-                    std::cout << "sam " << sam << std::endl;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // P
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx;
+                    match_Result[BM_size].y = sy - 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // B
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                }
+                else if (abs(sy - origin_y) == 0)
+                {
+                    // std::cout << "match left" << std::endl;
+                    //  2
+                    //  B
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy - 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // C
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // D
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                }
+                else if (abs(sy - origin_y) > 0)
+                {
+                    // std::cout << "match left down" << std::endl;
+                    //  3
+                    //  D
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // E
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // F
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
                     sam = 0;
                     BM_size++;
                 }
             }
-        }
-        std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-                  { return alpha.sam < beta.sam; });
-        std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
-    }
-    else
-    {
-        std::cout << "near distance" << std::endl;
-        /*
-            A P O N M
-            B 1 4 7 L
-            C 2 5 8 K
-            D 3 6 9 J
-            E F G H I
-        */
-        if (abs(sx - origin_x) < 0)
-        {
-            if (abs(sy - origin_y) < 0)
+            else if (abs(sx - origin_x) == 0)
             {
-                std::cout << "match left up" << std::endl;
-                // 1
-                // A
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
+                if (abs(sy - origin_y) < 0)
                 {
-                    for (int j = 0; j < block.rows; j++)
+                    // std::cout << "match up" << std::endl;
+                    //  4
+                    //  P
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy - 1;
+                    for (int i = 0; i < block.cols; i++)
                     {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                        for (int j = 0; j < block.rows; j++)
                         {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
                         }
                     }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // P
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // O
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx;
+                    match_Result[BM_size].y = sy - 1;
+                    for (int i = 0; i < block.cols; i++)
                     {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                        for (int j = 0; j < block.rows; j++)
                         {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
                         }
                     }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // B
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // N
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy - 1;
+                    for (int i = 0; i < block.cols; i++)
                     {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                        for (int j = 0; j < block.rows; j++)
                         {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
                         }
                     }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
                 }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
+                else if (abs(sy - origin_y) == 0)
+                {
+                    // std::cout << "match second origin" << std::endl;
+                }
+                else if (abs(sy - origin_y) > 0)
+                {
+                    // std::cout << "match down" << std::endl;
+                    //  6
+                    //  F
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx - 1;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // G
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // H
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                }
             }
-            else if (abs(sy - origin_y) == 0)
+            else if (abs(sx - origin_x) > 0)
             {
-                std::cout << "match left" << std::endl;
-                // 2
-                // B
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
+                if (abs(sy - origin_y) < 0)
                 {
-                    for (int j = 0; j < block.rows; j++)
+                    // std::cout << "match right up" << std::endl;
+                    //  7
+                    //  N
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx;
+                    match_Result[BM_size].y = sy - 1;
+                    for (int i = 0; i < block.cols; i++)
                     {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                        for (int j = 0; j < block.rows; j++)
                         {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
                         }
                     }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // C
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // M
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy - 1;
+                    for (int i = 0; i < block.cols; i++)
                     {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                        for (int j = 0; j < block.rows; j++)
                         {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
                         }
                     }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // D
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // L
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy;
+                    for (int i = 0; i < block.cols; i++)
                     {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                        for (int j = 0; j < block.rows; j++)
                         {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
                         }
                     }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
                 }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
+                else if (abs(sy - origin_y) == 0)
+                {
+                    // std::cout << " match right" << std::endl;
+                    //  8
+                    //  L
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy - 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // K
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // J
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                }
+                else if (abs(sy - origin_y) > 0)
+                {
+                    // std::cout << "match right down" << std::endl;
+                    //  9
+                    //  H
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // I
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy + 1;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                    // J
+                    match_Result.resize(BM_size + 1);
+                    match_Result[BM_size].x = sx + 1;
+                    match_Result[BM_size].y = sy;
+                    for (int i = 0; i < block.cols; i++)
+                    {
+                        for (int j = 0; j < block.rows; j++)
+                        {
+                            if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
+                            {
+                                // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
+                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                            }
+                        }
+                    }
+                    match_Result[BM_size].sam = sam;
+                    // std::cout << sam << std::endl;
+                    sam = 0;
+                    BM_size++;
+                }
             }
-            else if (abs(sy - origin_y) > 0)
-            {
-                std::cout << "match left down" << std::endl;
-                // 3
-                // D
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // E
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // F
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-            }
-        }
-        else if (abs(sx - origin_x) == 0)
-        {
-            if (abs(sy - origin_y) < 0)
-            {
-                std::cout << "match up" << std::endl;
-                // 4
-                // P
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // O
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // N
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-            }
-            else if (abs(sy - origin_y) == 0)
-            {
-                std::cout << "match second origin" << std::endl;
-            }
-            else if (abs(sy - origin_y) > 0)
-            {
-                std::cout << "match down" << std::endl;
-                // 6
-                // F
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx - 1;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // G
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // H
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-            }
-        }
-        else if (abs(sx - origin_x) > 0)
-        {
-            if (abs(sy - origin_y) < 0)
-            {
-                std::cout << "match right up" << std::endl;
-                // 7
-                // N
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // M
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // L
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-            }
-            else if (abs(sy - origin_y) == 0)
-            {
-                std::cout << " match right" << std::endl;
-                // 8
-                // L
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy - 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // K
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // J
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-            }
-            else if (abs(sy - origin_y) > 0)
-            {
-                std::cout << "match right down" << std::endl;
-                // 9
-                // H
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // I
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy + 1;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-                // J
-                match_Result.resize(BM_size + 1);
-                match_Result[BM_size].x = sx + 1;
-                match_Result[BM_size].y = sy;
-                for (int i = 0; i < block.cols; i++)
-                {
-                    for (int j = 0; j < block.rows; j++)
-                    {
-                        if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
-                        {
-                            // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
-                        }
-                    }
-                }
-                match_Result[BM_size].sam = sam;
-                std::cout << sam << std::endl;
-                sam = 0;
-                BM_size++;
-            }
-        }
-        std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-                  { return alpha.sam < beta.sam; });
-        std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
-    }
+            std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
+                      { return alpha.sam < beta.sam; });
+            // std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+            // std::cout << " -> second match(" << match_Result[0].x << " " << match_Result[0].y << ")     distance = " << sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].y))) << std::endl;
 
-    std::cout << "origin point (" << origin_x << " " << origin_y << ") -> first match(" << sx << " " << sy << ") -> second match(" << match_Result[0].x << " " << match_Result[0].y << ")" << std::endl;
+            return;
+        }
+        tx = sx;
+        ty = sy;
+        sx = match_Result[0].x;
+        sy = match_Result[0].y;
+    }
+    // std::cout << " distance = " << (int)sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x))) << std::endl;
+
     return;
 }
 
@@ -869,15 +1153,35 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     if (b_size % 2 != 1)
         b_size++;
 
+    std::vector<std::thread> ntss;
+
+    worker_pool<void> worker = worker_pool();
+    clock_t begin = clock();
     for (int x = b_size / 2; x < block.cols; x += b_size)
     {
         for (int y = b_size / 2; y < block.rows; y += b_size)
         {
             if (mode == 0)
                 if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
-                    NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                {
+                    worker.run(NTSS, block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4))
+                    //ntss.push_back(std::thread(NTSS, block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4));
+                    // NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                }
         }
     }
+
+    clock_t end = clock();
+    std::cout << "block matching time = ";
+    print_elapsed_time(begin, end);
+    clock_t begin2 = clock();
+
+    for (int i = 0; i < ntss.size(); i++)
+    {
+        ntss[i].join();
+    }
+    clock_t end2 = clock();
+    print_elapsed_time(begin2, end2);
 }
 
 void xmlRead()
@@ -946,17 +1250,18 @@ void xmlRead()
         // std::cout << f1g << std::endl;
         //  cvt_LBP(frame, distort);
         //  cvt_LBP(frame2, distort2);
-        //   clock_t begin = clock();
         //    cv::undistort(frame, distort, xml00.camera_matrix, xml00.distcoeffs);
         //    cv::remap(distort, distort, matx, maty, cv::INTER_LANCZOS4);
         //    cv::remap(distort2, distort2, matx2, maty2, cv::INTER_LANCZOS4);
-        cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
-        cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
+        cv::remap(f1g, distort, matx, maty, cv::INTER_LINEAR);
+        cv::remap(f2g, distort2, matx2, maty2, cv::INTER_LINEAR);
+
+        // clock_t begin = clock();
+        block_Matching(distort, distort2, 5, NTSS_GRAY);
         // clock_t end = clock();
         // print_elapsed_time(begin, end);
 
-        block_Matching(f1g, f2g, 5, NTSS_GRAY);
-        // cv::imshow("a", distort);
+        cv::imshow("a", distort);
         // cv::imshow("b", distort2);
 
         const int key = cv::waitKey(10);
@@ -1045,7 +1350,7 @@ void subMat()
     // clock_t end = clock();
     // print_elapsed_time(begin, end);
 
-    std::cout << (int)f1g.at<unsigned char>(24, 24) << " " << (int)f2g.at<unsigned char>(24, 24) << " " << abs(f1g.at<unsigned char>(24, 24) - f2g.at<unsigned char>(24, 24)) << std::endl;
+    // std::cout << (int)f1g.at<unsigned char>(24, 24) << " " << (int)f2g.at<unsigned char>(24, 24) << " " << abs(f1g.at<unsigned char>(24, 24) - f2g.at<unsigned char>(24, 24)) << std::endl;
     cv::imshow("a", f1g);
     cv::imshow("b", f2g);
 
