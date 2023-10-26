@@ -26,6 +26,8 @@ std::string tag = ".png";
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
+static std::mutex m;
+
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
@@ -1171,9 +1173,9 @@ rect = src.clone();
 
 class BLOCK_MATCHING
 {
-private:
+public:
     cv::Mat block, src;
-    int origin_x, origin_y;
+    int origin_x, origin_y, distance;
 
 public:
     BLOCK_MATCHING(const cv::Mat block_img, const cv::Mat src_img, const int x, const int y)
@@ -1186,12 +1188,22 @@ public:
 
     BLOCK_MATCHING(const BLOCK_MATCHING &BM_)
     {
+        block = BM_.block.clone();
+        src = BM_.src.clone();
+        origin_x = BM_.origin_x;
+        origin_y = BM_.origin_y;
     }
 
 public:
-    void Do_NTSS()
+    void DO_NTSS()
     {
         NTSS(this->block, this->src, this->origin_x, this->origin_y, 4);
+        return;
+    }
+
+    void get_ELEMENTS()
+    {
+        std::cout << "block, src, x, y " << block.empty() << " " << src.empty() << " " << origin_x << " " << origin_y << std::endl;
     }
 
 private:
@@ -1897,19 +1909,18 @@ private:
         return;
     }
 };
+worker_pool<ThreadCount> worker;
 
 void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, int mode)
 {
+    int times = 0;
+    int sum = 0;
+    std::vector<int> time;
     int b_size = block_size * 5;
     if (b_size % 2 != 1)
         b_size++;
 
-    std::vector<BLOCK_MATCHING> ntss;
-    int ntss_size = 0;
-
-    worker_pool<ThreadCount> worker;
-
-    clock_t begin = clock();
+    // clock_t begin = clock();
     for (int x = b_size / 2; x < block.cols; x += b_size)
     {
         for (int y = b_size / 2; y < block.rows; y += b_size)
@@ -1917,27 +1928,28 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
             if (mode == 0)
                 if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
                 {
-                    ntss.push_back(BLOCK_MATCHING(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y));
-                    // worker.run<void>(ntss.Do_NTSS());
-                    // worker.run(NTSS, block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4))
-                    //  ntss.push_back(std::thread(NTSS, block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4));
-                    //   NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                    times++;
+                    /*
+                    worker.run([x, y, &b_size, &block, src, &sum]()
+                               {
+                                NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                                m.lock();
+                                sum++;
+                                m.unlock();
+                                return; });
+                    */
+                    NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
                 }
         }
     }
 
-    clock_t end = clock();
-    std::cout << "block matching time = ";
-    print_elapsed_time(begin, end);
-    clock_t begin2 = clock();
+    // while (sum < times)
+    //  std::cout << sum << " " << times << std::endl;
+    ;
 
-    /*/
-    for (int i = 0; i < ntss.size(); i++)
-    {
-        ntss[i].join();
-    }*/
-    clock_t end2 = clock();
-    print_elapsed_time(begin2, end2);
+    // clock_t end = clock();
+    // print_elapsed_time(begin, end);
+    //  std::cout << "block matching time = ";
 }
 
 void xmlRead()
@@ -2012,10 +2024,13 @@ void xmlRead()
         cv::remap(f1g, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(f2g, distort2, matx2, maty2, cv::INTER_LINEAR);
 
-        // clock_t begin = clock();
-        block_Matching(distort, distort2, 5, NTSS_GRAY);
-        // clock_t end = clock();
-        // print_elapsed_time(begin, end);
+        clock_t begin = clock();
+        std::cout << "start block_matching" << std::endl;
+        worker.run([distort, distort2, NTSS_GRAY]()
+                   { block_Matching(distort, distort2, 5, NTSS_GRAY); });
+        std::cout << "end block_matching" << std::endl;
+        clock_t end = clock();
+        print_elapsed_time(begin, end);
 
         cv::imshow("a", distort);
         // cv::imshow("b", distort2);
@@ -2126,28 +2141,54 @@ void func(int i)
     std::cout << "来たよ！ " << i << std::endl;
 }
 
+template <typename F>
+void test_run(F &&task)
+{
+    task;
+}
+
 void thread_pool_test()
 {
+    int sum = 0;
+    int time = 0;
+    int copy;
     worker_pool<ThreadCount> worker;
     std::vector<BLOCK_MATCHING> s;
     cv::Mat img = cv::imread("images/Test00/000000.jpg", 0);
     cv::Mat img2 = cv::imread("images/Test01/000222.jpg", 0);
-    std::cout << img.empty() << std::endl;
     clock_t begin = clock();
     for (int i = 0; i < 100; i++)
     {
-        s.push_back(BLOCK_MATCHING(img(cv::Range(0, 0), cv::Range(25, 25)), img2, 8, 8));
-        std::cout << s.at(1).origin_x << std::endl;;
+        time++;
+        copy = i;
+        s.push_back(BLOCK_MATCHING(img(cv::Range(0, 25), cv::Range(0, 25)), img2, 8, 8));
+        s[i].get_ELEMENTS();
+        // std::cout << s[i].origin_x << std::endl;
+        // s[i].Do_NTSS();
+        worker.run([&s, i, &sum]()
+                   {
+            s[i].get_ELEMENTS();
+            s[i].DO_NTSS();
+            std::cout << sum++ << std::endl;;            
+            return; });
+        // worker.run([&img, &img2](){ NTSS(img(cv::Range(0, 0), cv::Range(25, 25)), img2, 8, 8, 4); });
+        //  worker.run([&s, &i](){std::cout << "s vector size" << s.size() <<std::endl; s[i].DO_NTSS(); });
+        //   worker.run([](){func(d);}(i));
+        //  test_run([](int i){ func(i); }(1));
     }
+    std::cout << "timeeeeeeeeeeeeeeeeeee " << time << std::endl;
+    while (sum < time)
+        std::cout << sum << std::endl;
     clock_t end = clock();
     print_elapsed_time(begin, end);
 }
+
 int main()
 {
 
     // detective();
-    // xmlRead();
+    xmlRead();
     // subMat();
-    thread_pool_test();
+    // thread_pool_test();
     return 0;
 }
