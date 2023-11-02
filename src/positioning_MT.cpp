@@ -217,6 +217,7 @@ void cvt_LBP(const cv::Mat &src, cv::Mat &lbp)
     // cv::imshow("second", lbp);
 }
 
+//テスト用のスレッド
 void test_thread()
 {
     std::cout << "test_thread start" << std::endl;
@@ -242,6 +243,7 @@ void test_thread()
     thread_finish++;
 }
 
+//画像の読み込み
 void read_image()
 {
     std::cout << "thread read_image() start" << std::endl;
@@ -277,6 +279,7 @@ void read_image()
     std::cout << "thread read_image() end" << std::endl;
 }
 
+//事前走行画像データベース作成
 void make_Dtbase()
 {
     std::cout << "make_Dtbase() start" << std::endl;
@@ -363,6 +366,7 @@ void make_Dtbase()
     std::cout << "make_Dtbase() end" << std::endl;
 }
 
+//事前走行画像のデータベースの更新
 void update_Dtbase()
 {
     std::string path;
@@ -408,6 +412,7 @@ void read_vector(std::vector<resulT> &v){
     std::cout << std::endl;
 }
 
+//LBP特徴を利用した自己位置推定
 void position_check()
 {
     std::cout << "position_check() start" << std::endl;

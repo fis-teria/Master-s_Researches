@@ -298,6 +298,7 @@ private:
     std::condition_variable cond_;
 };
 
+// 事前走行画像が入ったフォルダから画像のパスをとってくる関数
 std::string make_tpath(std::string dir, int dir_num, int var, std::string tag)
 {
     std::string back;
@@ -329,10 +330,11 @@ void print_elapsed_time(clock_t begin, clock_t end)
     printf("Elapsed Time: %15.7f sec\n", elapsed);
 }
 
+// LBP特徴にかけるフィルター
 int LBP_filter[3][3] = {{64, 32, 16},
                         {128, 0, 8},
                         {1, 2, 4}};
-
+// LBP特徴の画像に変換する関数
 void cvt_LBP(const cv::Mat &src, cv::Mat &lbp)
 {
     lbp = cv::Mat(src.rows, src.cols, CV_8UC1);
@@ -426,6 +428,7 @@ void detective()
     }
 }
 
+// キャリブレーションから得られた外部関数を読み込むクラス
 class readXml
 {
 public:
@@ -462,6 +465,7 @@ public:
     }
 };
 
+//ブロックマッチングに使うかもしれない構造体
 struct BM
 {
     int x;
@@ -469,10 +473,13 @@ struct BM
     int sam;
 };
 
-void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int step)
+// グレースケール画像のブロックマッチング アルゴリズムはNTSS法を使用
+double NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int step)
 {
     cv::Mat rect = src.clone();
     std::vector<BM> match_Result;
+    int dist;
+    double depth;
     int BM_size = 0;
     int sam = 0;
     int k = origin_x - step;
@@ -496,6 +503,7 @@ void NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, 
     // std::cout << "origin_x " << origin_x << " origin_y " << origin_y << std::endl;
     // std::cout << "first step" << std::endl;
     // std::cout << "step distance round search" << std::endl;
+
     for (int x = k; x <= end_x; x += step)
     {
         for (int y = l; y <= end_y; y += step)
@@ -583,6 +591,7 @@ rect = src.clone();
     int ty = origin_y;
 
     // std::cout << "origin point (" << origin_x << " " << origin_y << ") -> first match(" << sx << " " << sy << ")";
+
     //  second steps and more
     for (int sstep = step / 2; sstep > 0; sstep /= 2)
     {
@@ -1158,19 +1167,29 @@ rect = src.clone();
                       { return alpha.sam < beta.sam; });
             // std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
             // std::cout << " -> second match(" << match_Result[0].x << " " << match_Result[0].y << ")     distance = " << sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].y))) << std::endl;
+            dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
+            // std::cout << " distance = " << dist << std::endl;
 
-            return;
+            depth = (16 * 1000 * 10 * 10 * 1000) / (6.25 * dist) / 1000000;
+            // std::cout << "depth = " << depth << std::endl;
+
+            return depth;
         }
         tx = sx;
         ty = sy;
         sx = match_Result[0].x;
         sy = match_Result[0].y;
     }
-    // std::cout << " distance = " << (int)sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x))) << std::endl;
+    dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
+    // std::cout << " distance = " << dist << std::endl;
 
-    return;
+    depth = (24 * 1000 * 7 * 10 * 1000) / (6.25 * dist) / 1000000;
+    // std::cout << "depth = " << depth << std::endl;
+
+    return depth;
 }
 
+// ブロックマッチングをさせるクラス 後々使うかも
 class BLOCK_MATCHING
 {
 public:
@@ -1909,14 +1928,22 @@ private:
         return;
     }
 };
+// スレッドプール
 worker_pool<ThreadCount> worker;
 
+// ブロックマッチングの準備をする関数
 void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, int mode)
 {
     int times = 0;
     int sum = 0;
+
     std::vector<int> time;
-    int b_size = block_size * 5;
+    cv::Mat depth_map = cv::Mat(block.rows, block.cols, CV_8UC3);
+    depth_map = cv::Scalar::all(0);
+    cv::Mat depth_map_HSV = depth_map.clone();
+    double depth = 0;
+    int depth_H = 0;
+    int b_size = block_size * 2 + 3;
     if (b_size % 2 != 1)
         b_size++;
 
@@ -1938,11 +1965,19 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
                                 m.unlock();
                                 return; });
                     */
-                    NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                    depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                    depth_H = depth * 20;
+                    if (depth_H > 180)
+                        depth_H = 180;
+                    if (depth_H < 0)
+                        depth_H = 0;
+                    //std::cout << depth << std::endl;
+                    cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
                 }
         }
     }
-
+    cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_BGR2HSV);
+    cv::imshow("depth", depth_map_HSV);
     // while (sum < times)
     //  std::cout << sum << " " << times << std::endl;
     ;
@@ -1952,6 +1987,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     //  std::cout << "block matching time = ";
 }
 
+//xmlから外部関数を読み込んでキャリブレーションされた画像を映す関数
 void xmlRead()
 {
     readXml xml00 = readXml("camera/out_camera_data00.xml");
@@ -2018,22 +2054,25 @@ void xmlRead()
         // std::cout << f1g << std::endl;
         //  cvt_LBP(frame, distort);
         //  cvt_LBP(frame2, distort2);
-        //    cv::undistort(frame, distort, xml00.camera_matrix, xml00.distcoeffs);
-        //    cv::remap(distort, distort, matx, maty, cv::INTER_LANCZOS4);
-        //    cv::remap(distort2, distort2, matx2, maty2, cv::INTER_LANCZOS4);
+        
         cv::remap(f1g, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(f2g, distort2, matx2, maty2, cv::INTER_LINEAR);
 
         clock_t begin = clock();
         std::cout << "start block_matching" << std::endl;
+        /*
         worker.run([distort, distort2, NTSS_GRAY]()
-                   { block_Matching(distort, distort2, 5, NTSS_GRAY); });
+                   { block_Matching(distort, distort2, 3, NTSS_GRAY); });
+        worker.run([distort, distort2, NTSS_GRAY]()
+                   { block_Matching(distort2, distort, 3, NTSS_GRAY); });
+        */
+        block_Matching(distort2, distort, 2, NTSS_GRAY);
         std::cout << "end block_matching" << std::endl;
         clock_t end = clock();
         print_elapsed_time(begin, end);
 
         cv::imshow("a", distort);
-        // cv::imshow("b", distort2);
+        cv::imshow("b", distort2);
 
         const int key = cv::waitKey(10);
         if (key == 'q' /*113*/) // qボタンが押されたとき

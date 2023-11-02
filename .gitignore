@@ -13,4 +13,5 @@ build/stereo_camera
 build/sub_image
 build/test
 build
+token
 !.gitignore
