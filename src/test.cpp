@@ -342,7 +342,7 @@ void cvt_LBP(const cv::Mat &src, cv::Mat &lbp)
     cv::Mat padsrc, blur;
     copyMakeBorder(src, padsrc, 1, 1, 1, 1, cv::BORDER_REPLICATE);
     // cv::bilateralFilter(padsrc, padsrc, 2, 2*2, 2/2);
-    cv::cvtColor(padsrc, padsrc, cv::COLOR_BGR2GRAY);
+    // cv::cvtColor(padsrc, padsrc, cv::COLOR_BGR2GRAY);
     // cv::medianBlur(padsrc, blur, 3);
     // padsrc = blur.clone();
     //  cv::imshow("first", src);
@@ -465,7 +465,7 @@ public:
     }
 };
 
-//ブロックマッチングに使うかもしれない構造体
+// ブロックマッチングに使うかもしれない構造体
 struct BM
 {
     int x;
@@ -473,6 +473,62 @@ struct BM
     int sam;
 };
 
+double sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y)
+{
+    cv::Mat rect = src.clone();
+    std::vector<BM> match_Result;
+    int dist;
+    double depth;
+    int BM_size = 0;
+    int sam = 0;
+    int y = origin_y;
+
+    for (int x = origin_x; x < origin_x + 400; x += block.cols)
+    {
+        if (x < src.cols)
+        {
+            // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+            match_Result.resize(BM_size + 1);
+            match_Result[BM_size].x = x;
+            match_Result[BM_size].y = y;
+            /*
+            rect = src.clone();
+            cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
+            cv::imshow("dd", rect);
+            const int key = cv::waitKey(10);
+            //*/
+
+            // std::cout << "start block matching" << std::endl;
+            for (int i = 0; i < block.cols; i++)
+            {
+                for (int j = 0; j < block.rows; j++)
+                {
+                    if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
+                    {
+                        // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
+                        sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                    }
+                }
+            }
+            match_Result[BM_size].sam = sam;
+            // std::cout << "sam " << sam << std::endl;
+            sam = 0;
+            BM_size++;
+        }
+    }
+
+    std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
+              { return alpha.sam < beta.sam; });
+    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+
+    dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
+    // std::cout << " distance = " << dist << std::endl;
+
+    depth = (24 * 1000 * 7 * 10 * 1000) / (6.25 * dist) / 1000000;
+    // std::cout << "depth = " << depth << std::endl;
+
+    return depth;
+}
 // グレースケール画像のブロックマッチング アルゴリズムはNTSS法を使用
 double NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int step)
 {
@@ -1965,18 +2021,19 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
                                 m.unlock();
                                 return; });
                     */
-                    depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                    depth = sim_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
+                    // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
                     depth_H = depth * 20;
-                    if (depth_H > 180)
-                        depth_H = 180;
+                    if (depth_H > 150)
+                        depth_H = 150;
                     if (depth_H < 0)
                         depth_H = 0;
-                    //std::cout << depth << std::endl;
+                    // std::cout << depth << std::endl;
                     cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
                 }
         }
     }
-    cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_BGR2HSV);
+    cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
     cv::imshow("depth", depth_map_HSV);
     // while (sum < times)
     //  std::cout << sum << " " << times << std::endl;
@@ -1987,7 +2044,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     //  std::cout << "block matching time = ";
 }
 
-//xmlから外部関数を読み込んでキャリブレーションされた画像を映す関数
+// xmlから外部関数を読み込んでキャリブレーションされた画像を映す関数
 void xmlRead()
 {
     readXml xml00 = readXml("camera/out_camera_data00.xml");
@@ -2054,7 +2111,7 @@ void xmlRead()
         // std::cout << f1g << std::endl;
         //  cvt_LBP(frame, distort);
         //  cvt_LBP(frame2, distort2);
-        
+
         cv::remap(f1g, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(f2g, distort2, matx2, maty2, cv::INTER_LINEAR);
 
@@ -2222,12 +2279,38 @@ void thread_pool_test()
     print_elapsed_time(begin, end);
 }
 
+void test_cvtLBP()
+{
+    cv::Mat img = cv::imread("images/test_img/left.JPG", 0);
+    cv::Mat lbp, lbp2;
+
+    cv::resize(img, img, cv::Size(), 0.3, 0.3);
+    lbp = cv::imread("images/test_img/right.JPG", 0);
+    cv::resize(lbp, lbp, cv::Size(), 0.3, 0.3);
+
+    // cvt_LBP(img, lbp);
+    //  cv::medianBlur(lbp, lbp2, 5);
+    // cv::bilateralFilter(lbp, lbp2, 3, 2 * 2, 2 / 2);
+    std::cout << "blockmatching" << std::endl;
+    block_Matching(lbp, img, 2, 0);
+    cv::imshow("left", img);
+    cv::imshow("right", lbp);
+    // cv::imshow("c", lbp2);
+
+    const int key = cv::waitKey(0);
+    if (key == 'q' /*113*/) // qボタンが押されたとき
+    {
+        // break; // whileループから抜ける．
+    }
+}
+
 int main()
 {
 
     // detective();
-    xmlRead();
+    // xmlRead();
     // subMat();
     // thread_pool_test();
+    test_cvtLBP();
     return 0;
 }

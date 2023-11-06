@@ -1,4 +1,5 @@
 build/CMakeFiles
+!build/images/test_img
 build/images
 build/logs
 build/Makefile
