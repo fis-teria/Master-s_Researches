@@ -31,6 +31,8 @@ static std::mutex m;
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
+const int BLOCK_MODE = NTSS_RGB;
+
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -473,7 +475,7 @@ struct BM
     int sam;
 };
 
-double sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y)
+double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y)
 {
     cv::Mat rect = src.clone();
     std::vector<BM> match_Result;
@@ -483,7 +485,11 @@ double sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin
     int sam = 0;
     int y = origin_y;
 
-    for (int x = origin_x; x < origin_x + 400; x += block.cols)
+    int start_x = origin_x - 100;
+    if (start_x < 0)
+        start_x = 0;
+
+    for (int x = start_x; x < origin_x + 400; x += block.cols)
     {
         if (x < src.cols)
         {
@@ -529,6 +535,68 @@ double sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin
 
     return depth;
 }
+
+double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y)
+{
+    cv::Mat rect = src.clone();
+    std::vector<BM> match_Result;
+    int dist;
+    double depth;
+    int BM_size = 0;
+    int sam = 0;
+    int y = origin_y;
+
+    int start_x = origin_x - 100;
+    if (start_x < 0)
+        start_x = 0;
+
+    for (int x = start_x; x < origin_x + 400; x += block.cols)
+    {
+        if (x < src.cols)
+        {
+            // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+            match_Result.resize(BM_size + 1);
+            match_Result[BM_size].x = x;
+            match_Result[BM_size].y = y;
+            /*
+            rect = src.clone();
+            cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
+            cv::imshow("dd", rect);
+            const int key = cv::waitKey(10);
+            //*/
+
+            // std::cout << "start block matching" << std::endl;
+            for (int i = 0; i < block.cols; i++)
+            {
+                for (int j = 0; j < block.rows; j++)
+                {
+                    if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
+                    {
+                        // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
+                        sam += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
+                    }
+                }
+            }
+            match_Result[BM_size].sam = sam;
+            // std::cout << "sam " << sam << std::endl;
+            sam = 0;
+            BM_size++;
+        }
+    }
+
+    std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
+              { return alpha.sam < beta.sam; });
+    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+
+    dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
+    // std::cout << " distance = " << dist << std::endl;
+
+    depth = (24 * 1000 * 7 * 10 * 1000) / (6.25 * dist) / 1000000;
+    // std::cout << "depth = " << depth << std::endl;
+
+    return depth;
+}
+
 // グレースケール画像のブロックマッチング アルゴリズムはNTSS法を使用
 double NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int step)
 {
@@ -1999,40 +2067,140 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     cv::Mat depth_map_HSV = depth_map.clone();
     double depth = 0;
     int depth_H = 0;
-    int b_size = block_size * 2 + 3;
+    int b_size = block_size;
     if (b_size % 2 != 1)
         b_size++;
 
     // clock_t begin = clock();
+    // マルチスレッド
+    for ()
+    {
+        for ()
+        {
+            worker.run[]()
+            {
+                if (mode == 0)
+                    for (int x = b_size / 2; x < block.cols; x += b_size)
+                    {
+                        for (int y = b_size / 2; y < block.rows; y += b_size)
+                        {
+                            if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+                            {
+                                times++;
+                                /*
+                                worker.run([x, y, &b_size, &block, src, &sum]()
+                                           {
+                                            NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                                            m.lock();
+                                            sum++;
+                                            m.unlock();
+                                            return; });
+                                */
+                                depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
+                                // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                                depth_H = depth * 20;
+                                if (depth_H > 150)
+                                    depth_H = 150;
+                                if (depth_H < 0)
+                                    depth_H = 0;
+                                // std::cout << depth << std::endl;
+                                cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+                            }
+                        }
+                    }
+                else if (mode == 1)
+                    for (int x = b_size / 2; x < block.cols; x += b_size)
+                    {
+                        for (int y = b_size / 2; y < block.rows; y += b_size)
+                        {
+                            if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+                            {
+                                times++;
+                                /*
+                                worker.run([x, y, &b_size, &block, src, &sum]()
+                                           {
+                                            NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                                            m.lock();
+                                            sum++;
+                                            m.unlock();
+                                            return; });
+                                */
+                                depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
+                                // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                                depth_H = depth * 20;
+                                if (depth_H > 150)
+                                    depth_H = 150;
+                                if (depth_H < 0)
+                                    depth_H = 0;
+                                // std::cout << depth << std::endl;
+                                cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+                            }
+                        }
+                    }
+            }
+        }
+    }
+    // シングルスレッド
+    /*
+    if (mode == 0)
     for (int x = b_size / 2; x < block.cols; x += b_size)
     {
         for (int y = b_size / 2; y < block.rows; y += b_size)
         {
-            if (mode == 0)
-                if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
-                {
-                    times++;
-                    /*
-                    worker.run([x, y, &b_size, &block, src, &sum]()
-                               {
-                                NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
-                                m.lock();
-                                sum++;
-                                m.unlock();
-                                return; });
-                    */
-                    depth = sim_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
-                    // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
-                    depth_H = depth * 20;
-                    if (depth_H > 150)
-                        depth_H = 150;
-                    if (depth_H < 0)
-                        depth_H = 0;
-                    // std::cout << depth << std::endl;
-                    cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
-                }
+            if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+            {
+                times++;
+                /*
+                worker.run([x, y, &b_size, &block, src, &sum]()
+                           {
+                            NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                            m.lock();
+                            sum++;
+                            m.unlock();
+                            return; });
+                //
+                    depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
+                // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                depth_H = depth * 20;
+                if (depth_H > 150)
+                    depth_H = 150;
+                if (depth_H < 0)
+                    depth_H = 0;
+                // std::cout << depth << std::endl;
+                cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+            }
         }
     }
+    else if (mode == 1)
+    for (int x = b_size / 2; x < block.cols; x += b_size)
+    {
+        for (int y = b_size / 2; y < block.rows; y += b_size)
+        {
+            if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+            {
+                times++;
+                /*
+                worker.run([x, y, &b_size, &block, src, &sum]()
+                           {
+                            NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 4);
+                            m.lock();
+                            sum++;
+                            m.unlock();
+                            return; });
+                //
+                    depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
+                // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                depth_H = depth * 20;
+                if (depth_H > 150)
+                    depth_H = 150;
+                if (depth_H < 0)
+                    depth_H = 0;
+                // std::cout << depth << std::endl;
+                cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+            }
+        }
+    }
+    */
     cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
     cv::imshow("depth", depth_map_HSV);
     // while (sum < times)
@@ -2105,16 +2273,22 @@ void xmlRead()
         cap2 >> frame2;
         // cv::imshow("win", frame);   // 画像を表示．
         // cv::imshow("win2", frame2); // 画像を表示．
-        cv::cvtColor(frame, f1g, cv::COLOR_BGR2GRAY);
-        cv::cvtColor(frame2, f2g, cv::COLOR_BGR2GRAY);
         // f1g.convertTo(f1g, CV_8U);
         // std::cout << f1g << std::endl;
         //  cvt_LBP(frame, distort);
         //  cvt_LBP(frame2, distort2);
 
-        cv::remap(f1g, distort, matx, maty, cv::INTER_LINEAR);
-        cv::remap(f2g, distort2, matx2, maty2, cv::INTER_LINEAR);
+        cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
+        cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
 
+        cv::resize(distort, distort, cv::Size(), 0.8, 0.8);
+        cv::resize(distort2, distort2, cv::Size(), 0.8, 0.8);
+
+        if (BLOCK_MODE == 0)
+        {
+            cv::cvtColor(distort, distort, cv::COLOR_BGR2GRAY);
+            cv::cvtColor(distort2, distort2, cv::COLOR_BGR2GRAY);
+        }
         clock_t begin = clock();
         std::cout << "start block_matching" << std::endl;
         /*
@@ -2123,7 +2297,7 @@ void xmlRead()
         worker.run([distort, distort2, NTSS_GRAY]()
                    { block_Matching(distort2, distort, 3, NTSS_GRAY); });
         */
-        block_Matching(distort2, distort, 2, NTSS_GRAY);
+        block_Matching(distort, distort2, 5, BLOCK_MODE);
         std::cout << "end block_matching" << std::endl;
         clock_t end = clock();
         print_elapsed_time(begin, end);
@@ -2281,18 +2455,24 @@ void thread_pool_test()
 
 void test_cvtLBP()
 {
-    cv::Mat img = cv::imread("images/test_img/left.JPG", 0);
+    cv::Mat img = cv::imread("images/test_img/left.JPG", 1);
     cv::Mat lbp, lbp2;
 
     cv::resize(img, img, cv::Size(), 0.3, 0.3);
-    lbp = cv::imread("images/test_img/right.JPG", 0);
+    lbp = cv::imread("images/test_img/right.JPG", 1);
     cv::resize(lbp, lbp, cv::Size(), 0.3, 0.3);
 
     // cvt_LBP(img, lbp);
     //  cv::medianBlur(lbp, lbp2, 5);
     // cv::bilateralFilter(lbp, lbp2, 3, 2 * 2, 2 / 2);
+    if (BLOCK_MODE == 0)
+    {
+        cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(lbp, lbp, cv::COLOR_BGR2GRAY);
+    }
+
     std::cout << "blockmatching" << std::endl;
-    block_Matching(lbp, img, 2, 0);
+    block_Matching(lbp, img, 2, BLOCK_MODE);
     cv::imshow("left", img);
     cv::imshow("right", lbp);
     // cv::imshow("c", lbp2);
@@ -2304,6 +2484,11 @@ void test_cvtLBP()
     }
 }
 
+void test_Mat()
+{
+    cv::Vec3b a = cv::Vec3b(100, 100, 100) - cv::Vec3b(50, 0, 0);
+    std::cout << (int)(a[0] + a[1] + a[2]) << std::endl;
+}
 int main()
 {
 
@@ -2312,5 +2497,6 @@ int main()
     // subMat();
     // thread_pool_test();
     test_cvtLBP();
+    // test_Mat();
     return 0;
 }
