@@ -1434,7 +1434,7 @@ worker_pool<ThreadCount> worker;
 void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, int mode)
 {
     int times = 0;
-    int sum = 2;
+    int sum = 4;
 
     std::vector<int> time;
     std::vector<BLOCK_MATCHING> vec_bm;
@@ -1479,9 +1479,9 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
                     }
                 }
             else if (mode == 1)
-                for (int x = b_size / 2 + (block.cols/2 - 2)*x_count; x <= end_cols; x += b_size)
+                for (int x = b_size / 2 + (block.cols/2 - 2)*x_count; x < end_cols; x += b_size)
                 {
-                    for (int y = b_size / 2 + (block.rows/2 - 2)*y_count; y <= end_rows; y += b_size)
+                    for (int y = b_size / 2 + (block.rows/2 - 2)*y_count; y < end_rows; y += b_size)
                     {
                         if (y + b_size / 2 < end_rows && x + b_size / 2 < end_cols)
                         {
@@ -1494,9 +1494,9 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
                         }
                     }
                 }
-            //m.lock();
+            m.lock();
             times++;
-            //m.unlock();  
+            m.unlock();  
             clock_t end = clock();
             float elapsed = (float)(end - begin) / CLOCKS_PER_SEC;
             printf("Elapsed Time: %15.7f sec\n", elapsed); 
@@ -1512,6 +1512,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
         // std::cout << sum << " " << times << std::endl;
         ;
     ///*
+    std::cout << "synchronous" << std::endl;
     for (int i = 0; i < vec_bm.size(); i++)
     {
         depth_H = vec_bm[i].depth * 20;
