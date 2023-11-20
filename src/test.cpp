@@ -31,7 +31,10 @@ static std::mutex m;
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
-const int BLOCK_MODE = NTSS_RGB;
+int L2R = -1;
+int R2L = 1;
+
+const int BLOCK_MODE = NTSS_GRAY;
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -475,7 +478,7 @@ struct BM
 };
 
 // シンプルなブロックマッチング グレースケール
-double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y)
+double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int LorR)
 {
     cv::Mat rect = src.clone();
     std::vector<BM> match_Result;
@@ -485,11 +488,28 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     int sam = 0;
     int y = origin_y;
 
-    int start_x = origin_x - 100;
+    int start_x;
+    int search_lange;
+    int end_lange;
+
+    if (LorR == R2L)
+    {
+        start_x = origin_x - 100;
+        search_lange = 400;
+    }
+    else if (LorR = L2R)
+    {
+        start_x = origin_x - 400;
+        search_lange = 100;
+    }
+    end_lange = origin_x + search_lange;
+
     if (start_x < 0)
         start_x = 0;
+    if (end_lange > src.cols)
+        end_lange = src.cols;
 
-    for (int x = start_x; x < origin_x + 400; x += block.cols)
+    for (int x = start_x; x < end_lange; x += block.cols)
     {
         if (x < src.cols)
         {
@@ -579,7 +599,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     return depth;
 }
 // シンプルなブロックマッチング BGR対応
-double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y)
+double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int LorR)
 {
     cv::Mat rect = src.clone();
     std::vector<BM> match_Result;
@@ -589,11 +609,28 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     int sam = 0;
     int y = origin_y;
 
-    int start_x = origin_x - 100;
+    int start_x;
+    int search_lange;
+    int end_lange;
+
+    if (LorR == R2L)
+    {
+        start_x = origin_x - 100;
+        search_lange = 400;
+    }
+    else if (LorR = L2R)
+    {
+        start_x = origin_x - 400;
+        search_lange = 100;
+    }
+    end_lange = origin_x + search_lange;
+
     if (start_x < 0)
         start_x = 0;
+    if (end_lange > src.cols)
+        end_lange = src.cols;
 
-    for (int x = start_x; x < origin_x + 400; x += block.cols)
+    for (int x = start_x; x < end_lange; x += block.cols)
     {
         if (x < src.cols)
         {
@@ -1431,7 +1468,7 @@ public:
 worker_pool<ThreadCount> worker;
 
 // ブロックマッチングの準備をする関数
-void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, int mode)
+void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, int mode, int LorR)
 {
     int times = 0;
     int sum = 4;
@@ -1448,6 +1485,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     int depth_H = 0;
     int x_count = 0;
     int y_count = 0;
+
     clock_t begin = clock();
     // マルチスレッド
     ///*
@@ -1455,54 +1493,55 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     {
         y_count = 0;
         for (int end_rows = block.rows / 2; end_rows <= block.rows; end_rows += block.rows / 2)
-        {   clock_t s = clock();
-            worker.run([mode, b_size, &vec_bm, end_cols, end_rows, &times, block, src, s, x_count, y_count]() {
-
-            clock_t begin = clock();
-            std::cout << "start time " << (float)(begin - s)/CLOCKS_PER_SEC << " sec" << std::endl;
-            std::cout << "end_cols, end_rows, x_count, y_count " << end_cols << " " << end_rows << " " << x_count << " " << y_count<< std::endl;
-            double depth = 0;
-            if (mode == 0)
-                for (int x = b_size / 2 + (block.cols/2 - 2)*x_count; x <= end_cols; x += b_size)
-                {
-                    for (int y = b_size / 2 + (block.rows/2 - 2)*y_count; y <= end_rows; y += b_size)
-                    {
-                        if (y + b_size / 2 < end_rows && x + b_size / 2 < end_cols)
-                        {
-                            // times++;
-                            depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
-                            // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
-                            m.lock();
-                            vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
-                            m.unlock();
-                        }
-                    }
-                }
-            else if (mode == 1)
-                for (int x = b_size / 2 + (block.cols/2 - 2)*x_count; x < end_cols; x += b_size)
-                {
-                    for (int y = b_size / 2 + (block.rows/2 - 2)*y_count; y < end_rows; y += b_size)
-                    {
-                        if (y + b_size / 2 < end_rows && x + b_size / 2 < end_cols)
-                        {
-                            // times++;
-                            depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
-                            // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
-                            m.lock();
-                            vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
-                            m.unlock();
-                        }
-                    }
-                }
-            m.lock();
-            times++;
-            m.unlock();  
-            clock_t end = clock();
-            float elapsed = (float)(end - begin) / CLOCKS_PER_SEC;
-            printf("Elapsed Time: %15.7f sec\n", elapsed); 
-            });
+        {
+            clock_t s = clock();
+            worker.run([mode, b_size, &vec_bm, end_cols, end_rows, &times, block, src, s, x_count, y_count, LorR]()
+                       {
+                           clock_t begin = clock();
+                           // std::cout << "start time " << (float)(begin - s)/CLOCKS_PER_SEC << " sec" << std::endl;
+                           // std::cout << "end_cols, end_rows, x_count, y_count " << end_cols << " " << end_rows << " " << x_count << " " << y_count<< std::endl;
+                           double depth = 0;
+                           if (mode == 0)
+                               for (int x = b_size / 2 + (block.cols / 2 - 2) * x_count; x <= end_cols; x += b_size)
+                               {
+                                   for (int y = b_size / 2 + (block.rows / 2 - 2) * y_count; y <= end_rows; y += b_size)
+                                   {
+                                       if (y + b_size / 2 < end_rows && x + b_size / 2 < end_cols)
+                                       {
+                                           // times++;
+                                           depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
+                                           // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                                           m.lock();
+                                           vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
+                                           m.unlock();
+                                       }
+                                   }
+                               }
+                           else if (mode == 1)
+                               for (int x = b_size / 2 + (block.cols / 2 - 2) * x_count; x <= end_cols; x += b_size)
+                               {
+                                   for (int y = b_size / 2 + (block.rows / 2 - 3) * y_count; y <= end_rows; y += b_size)
+                                   {
+                                       if (y + b_size / 2 < end_rows && x + b_size / 2 < end_cols)
+                                       {
+                                           // times++;
+                                           depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
+                                           // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                                           m.lock();
+                                           vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
+                                           m.unlock();
+                                       }
+                                   }
+                               }
+                           m.lock();
+                           times++;
+                           m.unlock();
+                           clock_t end = clock();
+                           float elapsed = (float)(end - begin) / CLOCKS_PER_SEC;
+                           // printf("Elapsed Time: %15.7f sec\n", elapsed);
+                       });
             clock_t e = clock();
-            print_elapsed_time(s, e);
+            // print_elapsed_time(s, e);
             y_count++;
         }
         x_count++;
@@ -1536,7 +1575,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
             if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
             {
                 times++;
-                    depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
+                    depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
                 // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
                 depth_H = depth * 20;
                 if (depth_H > 150)
@@ -1556,7 +1595,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
             if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
             {
                 times++;
-                    depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y);
+                    depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
                 // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
                 depth_H = depth * 20;
                 if (depth_H > 150)
@@ -1574,7 +1613,10 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     print_elapsed_time(begin, end);
 
     cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
-    cv::imshow("depth", depth_map_HSV);
+    if (LorR == R2L)
+        cv::imshow("depth R2L", depth_map_HSV);
+    else if (LorR == L2R)
+        cv::imshow("depth L2R", depth_map_HSV);
 
     //  std::cout << "block matching time = ";
 }
@@ -1664,7 +1706,7 @@ void xmlRead()
         worker.run([distort, distort2, NTSS_GRAY]()
                    { block_Matching(distort2, distort, 3, NTSS_GRAY); });
         */
-        block_Matching(distort, distort2, 5, BLOCK_MODE);
+        block_Matching(distort, distort2, 5, BLOCK_MODE, R2L);
         std::cout << "end block_matching" << std::endl;
         clock_t end = clock();
         print_elapsed_time(begin, end);
@@ -1812,9 +1854,9 @@ void test_cvtLBP()
     cv::Mat img = cv::imread("images/test_img/left.JPG", 1);
     cv::Mat lbp, lbp2;
 
-    cv::resize(img, img, cv::Size(), 0.3, 0.3);
+    cv::resize(img, img, cv::Size(), 0.25, 0.25);
     lbp = cv::imread("images/test_img/right.JPG", 1);
-    cv::resize(lbp, lbp, cv::Size(), 0.3, 0.3);
+    cv::resize(lbp, lbp, cv::Size(), 0.25, 0.25);
 
     // cvt_LBP(img, lbp);
     //  cv::medianBlur(lbp, lbp2, 5);
@@ -1826,7 +1868,8 @@ void test_cvtLBP()
     }
 
     std::cout << "blockmatching" << std::endl;
-    block_Matching(lbp, img, 2, BLOCK_MODE);
+    block_Matching(lbp, img, 3, BLOCK_MODE, R2L);
+    block_Matching(img, lbp, 3, BLOCK_MODE, L2R);
     cv::imshow("left", img);
     cv::imshow("right", lbp);
     // cv::imshow("c", lbp2);
