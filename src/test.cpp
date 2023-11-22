@@ -26,6 +26,8 @@ std::string tag = ".png";
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
+int WIDTH = 896;
+int HEIGHT = 504;
 static std::mutex m;
 
 const int NTSS_GRAY = 0;
@@ -341,8 +343,8 @@ int LBP_filter[3][3] = {{64, 32, 16},
 // LBP特徴の画像に変換する関数
 void cvt_LBP(const cv::Mat &src, cv::Mat &lbp)
 {
-    lbp = cv::Mat(src.rows, src.cols, CV_8UC1);
-    lbp = cv::Scalar::all(0);
+    cv::Mat dst = cv::Mat(src.rows, src.cols, CV_8UC1);
+    dst = cv::Scalar::all(0);
     cv::Mat padsrc, blur;
     copyMakeBorder(src, padsrc, 1, 1, 1, 1, cv::BORDER_REPLICATE);
     // cv::bilateralFilter(padsrc, padsrc, 2, 2*2, 2/2);
@@ -360,12 +362,13 @@ void cvt_LBP(const cv::Mat &src, cv::Mat &lbp)
                 for (int j = 0; j < 3; j++)
                 {
                     if (padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) >= padsrc.at<unsigned char>(y, x))
-                        lbp.at<unsigned char>(y - 1, x - 1) += LBP_filter[i][j];
+                        dst.at<unsigned char>(y - 1, x - 1) += LBP_filter[i][j];
                 }
             }
         }
     }
     // cv::imshow("second", lbp);
+    lbp = dst.clone();
 }
 
 void detective()
@@ -495,11 +498,11 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = 400;
+        search_lange = HEIGHT/3;
     }
     else if (LorR = L2R)
     {
-        start_x = origin_x - 400;
+        start_x = origin_x - HEIGHT/3;
         search_lange = 100;
     }
     end_lange = origin_x + search_lange;
@@ -517,12 +520,6 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
             match_Result.resize(BM_size + 1);
             match_Result[BM_size].x = x;
             match_Result[BM_size].y = y;
-            /*
-            rect = src.clone();
-            cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
-            cv::imshow("dd", rect);
-            const int key = cv::waitKey(10);
-            //*/
 
             // std::cout << "start block matching" << std::endl;
             for (int i = 0; i < block.cols; i++)
@@ -547,6 +544,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
               { return alpha.sam < beta.sam; });
     // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
 
+    /*
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
     BM_size = 0;
@@ -561,12 +559,6 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
             match_Result.resize(BM_size + 1);
             match_Result[BM_size].x = x;
             match_Result[BM_size].y = y;
-            /*
-            rect = src.clone();
-            cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
-            cv::imshow("dd", rect);
-            const int key = cv::waitKey(10);
-            //*/
 
             // std::cout << "start block matching" << std::endl;
             for (int i = 0; i < block.cols; i++)
@@ -589,7 +581,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sam < beta.sam; });
-
+    */
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     // std::cout << " distance = " << dist << std::endl;
 
@@ -616,11 +608,11 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = 400;
+        search_lange = HEIGHT/3;
     }
     else if (LorR = L2R)
     {
-        start_x = origin_x - 400;
+        start_x = origin_x - HEIGHT/3;
         search_lange = 100;
     }
     end_lange = origin_x + search_lange;
@@ -666,7 +658,8 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sam < beta.sam; });
-
+    
+    /*
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
     BM_size = 0;
@@ -681,12 +674,6 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
             match_Result.resize(BM_size + 1);
             match_Result[BM_size].x = x;
             match_Result[BM_size].y = y;
-            /*
-            rect = src.clone();
-            cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
-            cv::imshow("dd", rect);
-            const int key = cv::waitKey(10);
-            //*/
 
             // std::cout << "start block matching" << std::endl;
             for (int i = 0; i < block.cols; i++)
@@ -709,7 +696,7 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sam < beta.sam; });
-
+    */
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     // std::cout << " distance = " << dist << std::endl;
 
@@ -1489,10 +1476,10 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     clock_t begin = clock();
     // マルチスレッド
     ///*
-    for (int end_cols = block.cols / 2; end_cols <= block.cols; end_cols += block.cols / 2)
+    for (int end_rows = block.rows / 2; end_rows <= block.rows; end_rows += block.rows / 2)
     {
-        y_count = 0;
-        for (int end_rows = block.rows / 2; end_rows <= block.rows; end_rows += block.rows / 2)
+        x_count = 0;
+        for (int end_cols = block.cols / 2; end_cols <= block.cols; end_cols += block.cols / 2)
         {
             clock_t s = clock();
             worker.run([mode, b_size, &vec_bm, end_cols, end_rows, &times, block, src, s, x_count, y_count, LorR]()
@@ -1502,9 +1489,9 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
                            // std::cout << "end_cols, end_rows, x_count, y_count " << end_cols << " " << end_rows << " " << x_count << " " << y_count<< std::endl;
                            double depth = 0;
                            if (mode == 0)
-                               for (int x = b_size / 2 + (block.cols / 2 - 2) * x_count; x <= end_cols; x += b_size)
+                               for (int y = b_size / 2 + (block.rows / 2 - 2) * y_count; y <= end_rows; y += b_size)
                                {
-                                   for (int y = b_size / 2 + (block.rows / 2 - 2) * y_count; y <= end_rows; y += b_size)
+                                   for (int x = b_size / 2 + (block.cols / 2 - 2) * x_count; x <= end_cols; x += b_size)
                                    {
                                        if (y + b_size / 2 < end_rows && x + b_size / 2 < end_cols)
                                        {
@@ -1518,9 +1505,9 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
                                    }
                                }
                            else if (mode == 1)
-                               for (int x = b_size / 2 + (block.cols / 2 - 2) * x_count; x <= end_cols; x += b_size)
+                               for (int y = b_size / 2 + (block.rows / 2 - 3) * y_count; y <= end_rows; y += b_size)
                                {
-                                   for (int y = b_size / 2 + (block.rows / 2 - 3) * y_count; y <= end_rows; y += b_size)
+                                   for (int x = b_size / 2 + (block.cols / 2 - 2) * x_count; x <= end_cols; x += b_size)
                                    {
                                        if (y + b_size / 2 < end_rows && x + b_size / 2 < end_cols)
                                        {
@@ -1542,9 +1529,9 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
                        });
             clock_t e = clock();
             // print_elapsed_time(s, e);
-            y_count++;
+            x_count++;
         }
-        x_count++;
+        y_count++;
     }
 
     while (times < sum)
@@ -1610,7 +1597,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     //*/
 
     clock_t end = clock();
-    print_elapsed_time(begin, end);
+    //print_elapsed_time(begin, end);
 
     cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
     if (LorR == R2L)
@@ -1680,6 +1667,7 @@ void xmlRead()
     {
         cap >> frame;
         cap2 >> frame2;
+        int b_time = 0;
         // cv::imshow("win", frame);   // 画像を表示．
         // cv::imshow("win2", frame2); // 画像を表示．
         // f1g.convertTo(f1g, CV_8U);
@@ -1690,8 +1678,8 @@ void xmlRead()
         cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
 
-        cv::resize(distort, distort, cv::Size(), 0.8, 0.8);
-        cv::resize(distort2, distort2, cv::Size(), 0.8, 0.8);
+        cv::resize(distort, distort, cv::Size(WIDTH, HEIGHT));
+        cv::resize(distort2, distort2, cv::Size(WIDTH, HEIGHT));
 
         if (BLOCK_MODE == 0)
         {
@@ -1699,17 +1687,23 @@ void xmlRead()
             cv::cvtColor(distort2, distort2, cv::COLOR_BGR2GRAY);
         }
         clock_t begin = clock();
+
         std::cout << "start block_matching" << std::endl;
-        /*
-        worker.run([distort, distort2, NTSS_GRAY]()
-                   { block_Matching(distort, distort2, 3, NTSS_GRAY); });
-        worker.run([distort, distort2, NTSS_GRAY]()
-                   { block_Matching(distort2, distort, 3, NTSS_GRAY); });
-        */
-        block_Matching(distort, distort2, 5, BLOCK_MODE, R2L);
+        worker.run([distort2, distort, BLOCK_MODE, R2L, &b_time]()
+                   {
+        block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
+        b_time++; });
+
+        worker.run([distort2, distort, BLOCK_MODE, L2R, &b_time]()
+                   {
+        block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
+        b_time++; });
+
+        //while (b_time < 2)
+        ;
         std::cout << "end block_matching" << std::endl;
         clock_t end = clock();
-        print_elapsed_time(begin, end);
+        //print_elapsed_time(begin, end);
 
         cv::imshow("a", distort);
         cv::imshow("b", distort2);
@@ -1851,27 +1845,38 @@ void thread_pool_test()
 
 void test_cvtLBP()
 {
-    cv::Mat img = cv::imread("images/test_img/left.JPG", 1);
-    cv::Mat lbp, lbp2;
+    int b_time = 0;
+    cv::Mat left = cv::imread("images/test_img/left.JPG", BLOCK_MODE);
+    cv::Mat right = cv::imread("images/test_img/right.JPG", BLOCK_MODE);
 
-    cv::resize(img, img, cv::Size(), 0.25, 0.25);
-    lbp = cv::imread("images/test_img/right.JPG", 1);
-    cv::resize(lbp, lbp, cv::Size(), 0.25, 0.25);
+    cv::resize(left, left, cv::Size(), 0.25, 0.25);
+    cv::resize(right, right, cv::Size(), 0.25, 0.25);
 
-    // cvt_LBP(img, lbp);
-    //  cv::medianBlur(lbp, lbp2, 5);
-    // cv::bilateralFilter(lbp, lbp2, 3, 2 * 2, 2 / 2);
-    if (BLOCK_MODE == 0)
-    {
-        cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
-        cv::cvtColor(lbp, lbp, cv::COLOR_BGR2GRAY);
-    }
+    // cvt_LBP(left, left);
+    // cvt_LBP(right, right);
+    // cv::Canny(left, left, 10, 100);
+    // cv::Canny(right, right, 10, 100);
+    // cv::medianBlur(left, left, 3);
+    // cv::medianBlur(right, right, 3);
 
     std::cout << "blockmatching" << std::endl;
-    block_Matching(lbp, img, 3, BLOCK_MODE, R2L);
-    block_Matching(img, lbp, 3, BLOCK_MODE, L2R);
-    cv::imshow("left", img);
-    cv::imshow("right", lbp);
+    clock_t begin = clock();
+    worker.run([right, left, BLOCK_MODE, R2L, &b_time]()
+               {
+        block_Matching(right, left, 3, BLOCK_MODE, R2L);
+        b_time++; });
+
+    worker.run([right, left, BLOCK_MODE, L2R, &b_time]()
+               {
+        block_Matching(left, right, 3, BLOCK_MODE, L2R);
+        b_time++; });
+    while (b_time < 2)
+        ;
+    clock_t end = clock();
+    print_elapsed_time(begin, end);
+
+    cv::imshow("left", left);
+    cv::imshow("right", right);
     // cv::imshow("c", lbp2);
 
     const int key = cv::waitKey(0);
@@ -1892,10 +1897,10 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-    // xmlRead();
+    //xmlRead();
     // subMat();
     // thread_pool_test();
-    test_cvtLBP();
+     test_cvtLBP();
     // test_Mat();
     return 0;
 }
