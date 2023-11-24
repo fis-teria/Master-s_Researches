@@ -26,17 +26,22 @@ std::string tag = ".png";
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
-int WIDTH = 896;
-int HEIGHT = 504;
+const int WIDTH = 896;
+const int HEIGHT = 504;
 static std::mutex m;
 
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
-int L2R = -1;
-int R2L = 1;
+const int L2R = -1;
+const int R2L = 1;
 
-const int BLOCK_MODE = NTSS_GRAY;
+const int debug = 1;
+const int sim_BM_check = 3;
+const int vec_check = 2;
+const int thread_check = 1;
+
+const int BLOCK_MODE = NTSS_RGB;
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -483,6 +488,9 @@ struct BM
 // シンプルなブロックマッチング グレースケール
 double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int LorR)
 {
+    if (debug == sim_BM_check)
+        std::cout << "start sim_BM" << std::endl;
+
     cv::Mat rect = src.clone();
     std::vector<BM> match_Result;
     int dist;
@@ -491,18 +499,18 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     int sam = 0;
     int y = origin_y;
 
-    int start_x;
-    int search_lange;
-    int end_lange;
+    int start_x = 0;
+    int search_lange = 0;
+    int end_lange = 0;
 
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = HEIGHT/3;
+        search_lange = HEIGHT / 3;
     }
-    else if (LorR = L2R)
+    else if (LorR == L2R)
     {
-        start_x = origin_x - HEIGHT/3;
+        start_x = origin_x - HEIGHT / 3;
         search_lange = 100;
     }
     end_lange = origin_x + search_lange;
@@ -544,7 +552,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
               { return alpha.sam < beta.sam; });
     // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
 
-    /*
+    ///*
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
     BM_size = 0;
@@ -581,7 +589,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sam < beta.sam; });
-    */
+    //*/
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     // std::cout << " distance = " << dist << std::endl;
 
@@ -593,6 +601,9 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
 // シンプルなブロックマッチング BGR対応
 double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int LorR)
 {
+    if (debug == sim_BM_check)
+        std::cout << "start sim_BM" << std::endl;
+
     cv::Mat rect = src.clone();
     std::vector<BM> match_Result;
     int dist;
@@ -601,18 +612,18 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     int sam = 0;
     int y = origin_y;
 
-    int start_x;
-    int search_lange;
-    int end_lange;
+    int start_x = 0;
+    int search_lange = 0;
+    int end_lange = 0;
 
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = HEIGHT/3;
+        search_lange = HEIGHT / 3;
     }
-    else if (LorR = L2R)
+    else if (LorR == L2R)
     {
-        start_x = origin_x - HEIGHT/3;
+        start_x = origin_x - HEIGHT / 3;
         search_lange = 100;
     }
     end_lange = origin_x + search_lange;
@@ -658,8 +669,8 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sam < beta.sam; });
-    
-    /*
+
+    ///*
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
     BM_size = 0;
@@ -696,7 +707,7 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sam < beta.sam; });
-    */
+    //*/
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     // std::cout << " distance = " << dist << std::endl;
 
@@ -1475,15 +1486,20 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
 
     clock_t begin = clock();
     // マルチスレッド
-    ///*
-    for (int end_rows = block.rows / 2; end_rows <= block.rows; end_rows += block.rows / 2)
+    /*
+    for (int end_cols = block.cols / 2; end_cols <= block.cols; end_cols += block.cols / 2)
     {
-        x_count = 0;
-        for (int end_cols = block.cols / 2; end_cols <= block.cols; end_cols += block.cols / 2)
+        y_count = 0;
+        for (int end_rows = block.rows / 2; end_rows <= block.rows; end_rows += block.rows / 2)
         {
             clock_t s = clock();
             worker.run([mode, b_size, &vec_bm, end_cols, end_rows, &times, block, src, s, x_count, y_count, LorR]()
                        {
+                            if (debug == thread_check) 
+                            {
+                                std::cout << " thread start" << std::endl;
+                            }
+                            
                            clock_t begin = clock();
                            // std::cout << "start time " << (float)(begin - s)/CLOCKS_PER_SEC << " sec" << std::endl;
                            // std::cout << "end_cols, end_rows, x_count, y_count " << end_cols << " " << end_rows << " " << x_count << " " << y_count<< std::endl;
@@ -1522,37 +1538,47 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
                                }
                            m.lock();
                            times++;
+                           if(debug == thread_check)
+                           {
+                            std::cout << "times = " << times << std::endl;
+                           }
                            m.unlock();
                            clock_t end = clock();
                            float elapsed = (float)(end - begin) / CLOCKS_PER_SEC;
-                           // printf("Elapsed Time: %15.7f sec\n", elapsed);
-                       });
+                           printf("Elapsed Time: %15.7f sec\n", elapsed); });
             clock_t e = clock();
-            // print_elapsed_time(s, e);
-            x_count++;
+            print_elapsed_time(s, e);
+            y_count++;
         }
-        y_count++;
+        x_count++;
+    }
+    if (debug == vec_check)
+        std::cout << vec_bm.size() << std::endl;
+
+    while (1){
+        //if(sum == times)break;
+        //std::cout << sum << " " << times << std::endl;
+        //std::cout << "wait time" << std::endl;
     }
 
-    while (times < sum)
-        // std::cout << sum << " " << times << std::endl;
-        ;
-    ///*
-    std::cout << "synchronous" << std::endl;
     for (int i = 0; i < vec_bm.size(); i++)
     {
         depth_H = vec_bm[i].depth * 20;
-        if (depth_H > 160)
-            depth_H = 160;
+        if (depth_H > 150)
+            depth_H = 150;
         if (depth_H < 0)
             depth_H = 0;
-        // std::cout << depth << std::endl;
+
+        if (debug == vec_check)
+            vec_bm[i].get_ELEMENTS();
+        // std::cout << vec_bm[i].depth << std::endl;
         cv::rectangle(depth_map, cv::Point(vec_bm[i].origin_x - b_size / 2, vec_bm[i].origin_y - b_size / 2), cv::Point(vec_bm[i].origin_x + b_size / 2, vec_bm[i].origin_y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
     }
+    std::cout << "synchronous" << std::endl;
     //*/
 
     // シングルスレッド
-    /*
+    ///*
     double depth = 0;
     if (mode == 0)
     for (int x = b_size / 2; x < block.cols; x += b_size)
@@ -1597,7 +1623,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     //*/
 
     clock_t end = clock();
-    //print_elapsed_time(begin, end);
+    print_elapsed_time(begin, end);
 
     cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
     if (LorR == R2L)
@@ -1699,11 +1725,11 @@ void xmlRead()
         block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
         b_time++; });
 
-        //while (b_time < 2)
+        // while (b_time < 2)
         ;
         std::cout << "end block_matching" << std::endl;
         clock_t end = clock();
-        //print_elapsed_time(begin, end);
+        // print_elapsed_time(begin, end);
 
         cv::imshow("a", distort);
         cv::imshow("b", distort2);
@@ -1824,7 +1850,7 @@ void thread_pool_test()
 {
     int sum = 0;
     int time = 0;
-    int copy;
+    int copy = 0;
     worker_pool<ThreadCount> worker;
     std::vector<BLOCK_MATCHING> s;
     cv::Mat img = cv::imread("images/Test00/000000.jpg", 0);
@@ -1845,7 +1871,6 @@ void thread_pool_test()
 
 void test_cvtLBP()
 {
-    int b_time = 0;
     cv::Mat left = cv::imread("images/test_img/left.JPG", BLOCK_MODE);
     cv::Mat right = cv::imread("images/test_img/right.JPG", BLOCK_MODE);
 
@@ -1861,6 +1886,8 @@ void test_cvtLBP()
 
     std::cout << "blockmatching" << std::endl;
     clock_t begin = clock();
+    /*
+    int b_time = 0;
     worker.run([right, left, BLOCK_MODE, R2L, &b_time]()
                {
         block_Matching(right, left, 3, BLOCK_MODE, R2L);
@@ -1872,6 +1899,10 @@ void test_cvtLBP()
         b_time++; });
     while (b_time < 2)
         ;
+    */
+    block_Matching(right, left, 3, BLOCK_MODE, R2L);
+    block_Matching(left, right, 3, BLOCK_MODE, L2R);
+
     clock_t end = clock();
     print_elapsed_time(begin, end);
 
@@ -1897,10 +1928,10 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-    //xmlRead();
+    // xmlRead();
     // subMat();
     // thread_pool_test();
-     test_cvtLBP();
+    test_cvtLBP();
     // test_Mat();
     return 0;
 }
