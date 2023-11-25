@@ -17,7 +17,7 @@ else()
 endif()
 # ビルドに関する設定
 set(EXECUTABLES "positioning_MT;match_Tsukuba_LBP;hog_detector;test;sub_image;stereo_camera;calibration;stereoGUI")
-set(DEPENDENT_LIBS opencv_core;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_videoio;opencv_objdetect;opencv_calib3d;opencv_features2d)
+set(DEPENDENT_LIBS opencv_core;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_videoio;opencv_objdetect;opencv_calib3d;opencv_features2d;pthread)
 foreach(target IN LISTS EXECUTABLES)
   add_executable(${target} src/${target}.cpp)
   target_link_libraries(${target} ${DEPENDENT_LIBS})

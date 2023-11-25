@@ -29,7 +29,7 @@ int wait_c2 = 0;
 
 int fin = 0;
 
-std::string dir = "images/cali_img0";
+std::string dir = "images/2023_1124";
 std::string tag = ".jpg";
 
 void print_elapsed_time(clock_t begin, clock_t end)
@@ -66,7 +66,7 @@ std::string make_tpath(std::string dir, int dir_num, int var, std::string tag)
 void camera1()
 {
     std::cout << "start c1" << std::endl;
-    cv::VideoCapture cap0(cn1, 0);
+    cv::VideoCapture cap0(cn1, 1);
     cap0.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap0.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap0.set(cv::CAP_PROP_BUFFERSIZE, 1);
@@ -101,7 +101,7 @@ void camera2()
 {
     std::cout << "start c2" << std::endl;
     /*** USBカメラの初期化(複数台USBカメラが存在する場合引数で選択) ***/
-    cv::VideoCapture cap1(cn2, 0);
+    cv::VideoCapture cap1(cn2, 1);
     cap1.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap1.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap1.set(cv::CAP_PROP_BUFFERSIZE, 1);
@@ -159,6 +159,11 @@ void test()
         clock_t end = clock();
         print_elapsed_time(begin, end);
 
+        cv::imwrite(make_tpath(dir, cn1, count, tag), src0);
+        cv::imwrite(make_tpath(dir, cn2, count, tag), src1);
+
+
+        /*
         int key = cv::waitKey(10);
         if (key == 'q')
             break;
@@ -168,6 +173,7 @@ void test()
             cv::imwrite(make_tpath(dir, cn2, count, tag), src1);
             count++;
         }
+        */
     }
     fin = 1;
 }

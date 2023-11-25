@@ -21,6 +21,17 @@
 #include <boost/foreach.hpp>
 #include <boost/lexical_cast.hpp>
 
+#define USE_OPENMP
+#if defined(_OPENMP) && defined(USE_OPENMP)
+#ifdef _WIN32
+#define OMP_PARALLEL_FOR __pragma(omp parallel for)
+#else
+#define OMP_PARALLEL_FOR _Pragma("omp parallel for")
+#endif
+#else
+#define OMP_PARALLEL_FOR
+#endif
+
 std::string dir = "images/Tsukuba0";
 std::string tag = ".png";
 int DB_dir_num = 0;
@@ -1495,11 +1506,11 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
             clock_t s = clock();
             worker.run([mode, b_size, &vec_bm, end_cols, end_rows, &times, block, src, s, x_count, y_count, LorR]()
                        {
-                            if (debug == thread_check) 
+                            if (debug == thread_check)
                             {
                                 std::cout << " thread start" << std::endl;
                             }
-                            
+
                            clock_t begin = clock();
                            // std::cout << "start time " << (float)(begin - s)/CLOCKS_PER_SEC << " sec" << std::endl;
                            // std::cout << "end_cols, end_rows, x_count, y_count " << end_cols << " " << end_rows << " " << x_count << " " << y_count<< std::endl;
@@ -1581,26 +1592,25 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     ///*
     double depth = 0;
     if (mode == 0)
+        OMP_PARALLEL_FOR
+#pragma omp private(depth_H, depth, x) 
     for (int x = b_size / 2; x < block.cols; x += b_size)
-    {
-        for (int y = b_size / 2; y < block.rows; y += b_size)
         {
-            if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+            for (int y = b_size / 2; y < block.rows; y += b_size)
             {
-                times++;
+                if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+                {
+                    times++;
                     depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
-                // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
-                depth_H = depth * 20;
-                if (depth_H > 150)
-                    depth_H = 150;
-                if (depth_H < 0)
-                    depth_H = 0;
-                // std::cout << depth << std::endl;
-                cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+// depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+#pragma omp critical
+                    vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
+                }
             }
         }
-    }
     else if (mode == 1)
+        OMP_PARALLEL_FOR
+#pragma omp private(depth_H, depth, x)
     for (int x = b_size / 2; x < block.cols; x += b_size)
     {
         for (int y = b_size / 2; y < block.rows; y += b_size)
@@ -1608,15 +1618,10 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
             if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
             {
                 times++;
-                    depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
-                // depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
-                depth_H = depth * 20;
-                if (depth_H > 150)
-                    depth_H = 150;
-                if (depth_H < 0)
-                    depth_H = 0;
-                // std::cout << depth << std::endl;
-                cv::rectangle(depth_map, cv::Point(x - b_size / 2, y - b_size / 2), cv::Point(x + b_size / 2, y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+                depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
+// depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+#pragma omp critical
+                vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
             }
         }
     }
@@ -1624,6 +1629,21 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
 
     clock_t end = clock();
     print_elapsed_time(begin, end);
+
+    for (int i = 0; i < vec_bm.size(); i++)
+    {
+        depth_H = vec_bm[i].depth * 20;
+        if (depth_H > 150)
+            depth_H = 150;
+        if (depth_H < 0)
+            depth_H = 0;
+
+        if (debug == vec_check)
+            vec_bm[i].get_ELEMENTS();
+        // std::cout << vec_bm[i].depth << std::endl;
+        cv::rectangle(depth_map, cv::Point(vec_bm[i].origin_x - b_size / 2, vec_bm[i].origin_y - b_size / 2), cv::Point(vec_bm[i].origin_x + b_size / 2, vec_bm[i].origin_y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+    }
+    std::cout << "synchronous" << std::endl;
 
     cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
     if (LorR == R2L)
