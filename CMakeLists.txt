@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(Guraduation_Resarch VERSION 1.1.0 LANGUAGES CXX)
+project(Master-s_Rsearches VERSION 1.1.0 LANGUAGES CXX)
 # ビルドフラグの設定
 find_package( OpenMP )
 

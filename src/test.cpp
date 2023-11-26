@@ -1924,9 +1924,9 @@ void test_cvtLBP()
     while (b_time < 2)
         ;
     */
-   #pragma omp section
+#pragma omp section
     block_Matching(right, left, 3, BLOCK_MODE, R2L);
-    #pragma omp section
+#pragma omp section
     block_Matching(left, right, 3, BLOCK_MODE, L2R);
 
     clock_t end = clock();
@@ -1945,8 +1945,23 @@ void test_cvtLBP()
 
 void test_Mat()
 {
-    cv::Vec3b a = cv::Vec3b(100, 100, 100) - cv::Vec3b(50, 0, 0);
-    std::cout << (int)(a[0] + a[1] + a[2]) << std::endl;
+    cv::Mat img = cv::imread("images/test_img/left.JPG", 1);
+    cv::UMat uimg;
+    cv::UMat ruimg = cv::UMat(img.rows, img.cols, CV_8UC3);
+    img.copyTo(uimg);
+    if (uimg.empty())
+        return;
+
+    for (int i = 0; i < 100; i++)
+    {
+        cv::resize(uimg, ruimg, cv::Size(), 0.2, 0.2);
+        if (ruimg.empty())
+            return;
+        cv::imshow("a", ruimg);
+        cv::waitKey(10);
+    }
+    cv::imwrite("images/a.jpg", ruimg);
+    const int key = cv::waitKey(0);
 }
 int main()
 {
@@ -1957,7 +1972,7 @@ int main()
     // xmlRead();
     // subMat();
     // thread_pool_test();
-    test_cvtLBP();
-    // test_Mat();
+    //test_cvtLBP();
+    test_Mat();
     return 0;
 }
