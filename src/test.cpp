@@ -52,7 +52,7 @@ const int sim_BM_check = 3;
 const int vec_check = 2;
 const int thread_check = 1;
 
-const int BLOCK_MODE = NTSS_RGB;
+const int BLOCK_MODE = NTSS_GRAY;
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -561,9 +561,11 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sam < beta.sam; });
-    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
 
-    ///*
+    if (debug == sim_BM_check)
+        std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size();
+
+    /*
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
     BM_size = 0;
@@ -602,10 +604,12 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
               { return alpha.sam < beta.sam; });
     //*/
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
-    // std::cout << " distance = " << dist << std::endl;
+    if (debug == sim_BM_check)
+        std::cout << " distance = " << dist;
 
     depth = (24 * 1000 * 7 * 10 * 1000) / (6.25 * dist) / 1000000;
-    // std::cout << "depth = " << depth << std::endl;
+    if (debug == sim_BM_check)
+        std::cout << " depth = " << depth << std::endl;
 
     return depth;
 }
@@ -1590,27 +1594,11 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
 
     // シングルスレッド
     ///*
+    std::cout << "single thread" << std::endl;
     double depth = 0;
     if (mode == 0)
         OMP_PARALLEL_FOR
-#pragma omp private(depth_H, depth, x) 
-    for (int x = b_size / 2; x < block.cols; x += b_size)
-        {
-            for (int y = b_size / 2; y < block.rows; y += b_size)
-            {
-                if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
-                {
-                    times++;
-                    depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
-// depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
-#pragma omp critical
-                    vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
-                }
-            }
-        }
-    else if (mode == 1)
-        OMP_PARALLEL_FOR
-#pragma omp private(depth_H, depth, x)
+#pragma omp private(depth_H, depth, x, block, src)
     for (int x = b_size / 2; x < block.cols; x += b_size)
     {
         for (int y = b_size / 2; y < block.rows; y += b_size)
@@ -1618,13 +1606,29 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
             if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
             {
                 times++;
-                depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
-// depth = NTSS(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, 32);
+                depth = sim_G_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
 #pragma omp critical
                 vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
             }
         }
     }
+    else if (mode == 1)
+        OMP_PARALLEL_FOR
+#pragma omp private(depth_H, depth, x, block, src)
+        for (int x = b_size / 2; x < block.cols; x += b_size)
+    {
+        for (int y = b_size / 2; y < block.rows; y += b_size)
+        {
+            if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+            {
+                times++;
+                depth = sim_C_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, LorR);
+#pragma omp critical
+                vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
+            }
+        }
+    }
+    std::cout << "end loop" << std::endl;
     //*/
 
     clock_t end = clock();
@@ -1920,7 +1924,9 @@ void test_cvtLBP()
     while (b_time < 2)
         ;
     */
+   #pragma omp section
     block_Matching(right, left, 3, BLOCK_MODE, R2L);
+    #pragma omp section
     block_Matching(left, right, 3, BLOCK_MODE, L2R);
 
     clock_t end = clock();
