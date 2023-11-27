@@ -37,8 +37,8 @@ std::string tag = ".png";
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
-const int WIDTH = 896;
-const int HEIGHT = 504;
+const int WIDTH = 1280; // 1280 896
+const int HEIGHT = 720; // 720 504
 static std::mutex m;
 
 const int NTSS_GRAY = 0;
@@ -1739,6 +1739,7 @@ void xmlRead()
         clock_t begin = clock();
 
         std::cout << "start block_matching" << std::endl;
+        /*
         worker.run([distort2, distort, BLOCK_MODE, R2L, &b_time]()
                    {
         block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
@@ -1749,8 +1750,12 @@ void xmlRead()
         block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
         b_time++; });
 
-        // while (b_time < 2)
+        while (b_time < 2)*/
         ;
+#pragma omp section
+        block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
+#pragma omp section
+        block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
         std::cout << "end block_matching" << std::endl;
         clock_t end = clock();
         // print_elapsed_time(begin, end);
@@ -1945,23 +1950,16 @@ void test_cvtLBP()
 
 void test_Mat()
 {
-    cv::Mat img = cv::imread("images/test_img/left.JPG", 1);
-    cv::UMat uimg;
-    cv::UMat ruimg = cv::UMat(img.rows, img.cols, CV_8UC3);
-    img.copyTo(uimg);
-    if (uimg.empty())
-        return;
 
-    for (int i = 0; i < 100; i++)
-    {
-        cv::resize(uimg, ruimg, cv::Size(), 0.2, 0.2);
-        if (ruimg.empty())
-            return;
-        cv::imshow("a", ruimg);
-        cv::waitKey(10);
-    }
-    cv::imwrite("images/a.jpg", ruimg);
+    cv::Mat img = cv::imread("images/test_img/left.JPG", 1);
+    cv::Mat fimg;
+    cv::Canny(img, fimg, 125, 255);
+    cv::imwrite("images/test_img/canny.jpg", fimg);
     const int key = cv::waitKey(0);
+    if (key == 'q' /*113*/) // qボタンが押されたとき
+    {
+        // break; // whileループから抜ける．
+    }
 }
 int main()
 {
@@ -1969,10 +1967,10 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-    // xmlRead();
+    //xmlRead();
     // subMat();
     // thread_pool_test();
-    //test_cvtLBP();
-    test_Mat();
+    // test_cvtLBP();
+     test_Mat();
     return 0;
 }

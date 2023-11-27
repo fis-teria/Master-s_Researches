@@ -29,7 +29,8 @@ int wait_c2 = 0;
 
 int fin = 0;
 
-std::string dir = "images/2023_1124";
+std::string dir = "images/2023_1128/left";
+std::string dir2 = "images/2023_1128/right";
 std::string tag = ".jpg";
 
 void print_elapsed_time(clock_t begin, clock_t end)
@@ -66,13 +67,16 @@ std::string make_tpath(std::string dir, int dir_num, int var, std::string tag)
 void camera1()
 {
     std::cout << "start c1" << std::endl;
-    cv::VideoCapture cap0(cn1, 1);
+    cv::VideoCapture cap0(cn1);
     cap0.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap0.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap0.set(cv::CAP_PROP_BUFFERSIZE, 1);
     cap0.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
     if (!cap0.isOpened())
+    {
+        std::cout << "not opend cam1" << std::endl;
         return;
+    }
 
     while (1)
     {
@@ -101,7 +105,7 @@ void camera2()
 {
     std::cout << "start c2" << std::endl;
     /*** USBカメラの初期化(複数台USBカメラが存在する場合引数で選択) ***/
-    cv::VideoCapture cap1(cn2, 1);
+    cv::VideoCapture cap1(cn2);
     cap1.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap1.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap1.set(cv::CAP_PROP_BUFFERSIZE, 1);
@@ -109,7 +113,10 @@ void camera2()
 
     /*** 初期化に失敗したらプログラム終了 ***/
     if (!cap1.isOpened())
+    {
+        std::cout << "not opened cam2" << std::endl;
         return;
+    }
 
     while (1)
     {
@@ -148,23 +155,24 @@ void test()
 
         clock_t begin = clock();
         absdiff(src0, src1, diff);
+        cv::imshow("preview0", src0);
+        cv::imshow("preview1", src1);
+        cv::imshow("diff", diff);
+        clock_t end = clock();
+
+        int key = cv::waitKey(10);
+        if (key == 'q')
+            break;
+
+        print_elapsed_time(begin, end);
         get_c1 = 0;
         get_c2 = 0;
         wait_c1++;
         wait_c2++;
-        cv::imshow("preview0", src0);
-        cv::imshow("preview1", src1);
-        cv::imshow("diff", diff);
-        /*** 30ms待機し，その間に押されたキーを変数keyに格納 ***/
-        clock_t end = clock();
-        print_elapsed_time(begin, end);
-
+        /*
         cv::imwrite(make_tpath(dir, cn1, count, tag), src0);
         cv::imwrite(make_tpath(dir, cn2, count, tag), src1);
 
-
-        /*
-        int key = cv::waitKey(10);
         if (key == 'q')
             break;
         else if (key == 'c')
