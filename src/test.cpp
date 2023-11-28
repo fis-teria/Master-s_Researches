@@ -346,6 +346,31 @@ std::string make_tpath(std::string dir, int dir_num, int var, std::string tag)
     }
 }
 
+std::string make_spath(std::string dir, int var, std::string tag)
+{
+    std::string back;
+    if (var < 10)
+    {
+        back = dir + "/00000" + std::to_string(var) + tag;
+        return back;
+    }
+    else if (var < 100)
+    {
+        back = dir + "/0000" + std::to_string(var) + tag;
+        return back;
+    }
+    else if (var < 1000)
+    {
+        back = dir + "/000" + std::to_string(var) + tag;
+        return back;
+    }
+    else if (var < 10000)
+    {
+        back = dir + "/00" + std::to_string(var) + tag;
+        return back;
+    }
+}
+
 void print_elapsed_time(clock_t begin, clock_t end)
 {
     float elapsed = (float)(end - begin) / CLOCKS_PER_SEC;
@@ -1753,9 +1778,9 @@ void xmlRead()
         while (b_time < 2)*/
         ;
 #pragma omp section
-        block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
+        //block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
 #pragma omp section
-        block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
+        //block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
         std::cout << "end block_matching" << std::endl;
         clock_t end = clock();
         // print_elapsed_time(begin, end);
@@ -1763,7 +1788,10 @@ void xmlRead()
         cv::imshow("a", distort);
         cv::imshow("b", distort2);
 
-        const int key = cv::waitKey(10);
+        cv::imwrite(make_tpath("images/2023_1128/left", count, ".jpg"), distort);
+        cv::imwrite(make_tpath("images/2023_1128/right", count, ".jpg"), distort2);
+
+        const int key = cv::waitKey(100);
         if (key == 'q' /*113*/) // qボタンが押されたとき
         {
             break; // whileループから抜ける．
@@ -1967,10 +1995,10 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-    //xmlRead();
+     xmlRead();
     // subMat();
     // thread_pool_test();
     // test_cvtLBP();
-     test_Mat();
+    //test_Mat();
     return 0;
 }

@@ -1,8 +1,6 @@
 build/CMakeFiles
-!build/images/test_img
 build/logs
 build/Makefile
-!build/camera
 build/calibration
 build/cmake_install.cmake
 build/CMakeCache.txt
@@ -13,5 +11,7 @@ build/stereo_camera
 build/sub_image
 build/test
 build
+!build/images/test_img
+!build/camera
 token
 !.gitignore
