@@ -33,7 +33,7 @@
 #endif
 
 std::string dir = "images/Tsukuba0";
-std::string tag = ".png";
+std::string tag = ".jpg";
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
@@ -542,11 +542,11 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = HEIGHT / 3;
+        search_lange = WIDTH / 3;
     }
     else if (LorR == L2R)
     {
-        start_x = origin_x - HEIGHT / 3;
+        start_x = origin_x - WIDTH / 3;
         search_lange = 100;
     }
     end_lange = origin_x + search_lange;
@@ -659,11 +659,11 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = HEIGHT / 3;
+        search_lange = WIDTH / 3;
     }
     else if (LorR == L2R)
     {
-        start_x = origin_x - HEIGHT / 3;
+        start_x = origin_x - WIDTH / 3;
         search_lange = 100;
     }
     end_lange = origin_x + search_lange;
@@ -1738,6 +1738,7 @@ void xmlRead()
     cv::initUndistortRectifyMap(xml02.camera_matrix, xml02.distcoeffs, cv::Mat(), xml02.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx2, maty2);
 
     cv::Mat f1g, f2g;
+    int count = 0;
     while (1) // 無限ループ
     {
         cap >> frame;
@@ -1788,8 +1789,9 @@ void xmlRead()
         cv::imshow("a", distort);
         cv::imshow("b", distort2);
 
-        cv::imwrite(make_tpath("images/2023_1128/left", count, ".jpg"), distort);
-        cv::imwrite(make_tpath("images/2023_1128/right", count, ".jpg"), distort2);
+        cv::imwrite(make_spath("images/2023_1128/left", count, tag), distort);
+        cv::imwrite(make_spath("images/2023_1128/right", count, tag), distort2);
+        count++;
 
         const int key = cv::waitKey(100);
         if (key == 'q' /*113*/) // qボタンが押されたとき
@@ -1995,10 +1997,10 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-     xmlRead();
+    // xmlRead();
     // subMat();
     // thread_pool_test();
-    // test_cvtLBP();
+     test_cvtLBP();
     //test_Mat();
     return 0;
 }
