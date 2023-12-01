@@ -1786,11 +1786,11 @@ void xmlRead()
         //clock_t end = clock();
         // print_elapsed_time(begin, end);
 
-        //cv::imshow("a", distort);
-        //cv::imshow("b", distort2);
+        cv::imshow("a", distort);
+        cv::imshow("b", distort2);
 
-        cv::imwrite(make_spath("images/2023_1128/left", count, tag), distort);
-        cv::imwrite(make_spath("images/2023_1128/right", count, tag), distort2);
+        //cv::imwrite(make_spath("images/2023_1128/left", count, tag), distort);
+        //cv::imwrite(make_spath("images/2023_1128/right", count, tag), distort2);
         std::cout << "write images " << count << std::endl;
         count++;
 
