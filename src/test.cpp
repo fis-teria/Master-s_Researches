@@ -1764,7 +1764,7 @@ void xmlRead()
         }
         clock_t begin = clock();
 
-        std::cout << "start block_matching" << std::endl;
+        //std::cout << "start block_matching" << std::endl;
         /*
         worker.run([distort2, distort, BLOCK_MODE, R2L, &b_time]()
                    {
@@ -1782,18 +1782,19 @@ void xmlRead()
         //block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
 #pragma omp section
         //block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
-        std::cout << "end block_matching" << std::endl;
-        clock_t end = clock();
+        //std::cout << "end block_matching" << std::endl;
+        //clock_t end = clock();
         // print_elapsed_time(begin, end);
 
-        cv::imshow("a", distort);
-        cv::imshow("b", distort2);
+        //cv::imshow("a", distort);
+        //cv::imshow("b", distort2);
 
         cv::imwrite(make_spath("images/2023_1128/left", count, tag), distort);
         cv::imwrite(make_spath("images/2023_1128/right", count, tag), distort2);
+        std::cout << "write images " << count << std::endl;
         count++;
 
-        const int key = cv::waitKey(100);
+        const int key = cv::waitKey(300);
         if (key == 'q' /*113*/) // qボタンが押されたとき
         {
             break; // whileループから抜ける．
@@ -1997,10 +1998,10 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-    // xmlRead();
+     xmlRead();
     // subMat();
     // thread_pool_test();
-     test_cvtLBP();
+    // test_cvtLBP();
     //test_Mat();
     return 0;
 }
