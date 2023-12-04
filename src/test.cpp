@@ -39,6 +39,7 @@ int Cam_dir_num = 2;
 
 const int WIDTH = 1280; // 1280 896
 const int HEIGHT = 720; // 720 504
+int DISTANSE = 10;      // H = 距離ｘ倍率
 static std::mutex m;
 
 const int NTSS_GRAY = 0;
@@ -514,11 +515,27 @@ public:
 };
 
 // ブロックマッチングに使うかもしれない構造体
-struct BM
+class BM
 {
+public:
     int x;
     int y;
-    int sam;
+    int sum;
+
+public:
+    BM(const int x, const int y, const int sum)
+    {
+        this->x = x;
+        this->y = y;
+        this->sum = sum;
+    }
+
+    BM(const BM &BM_)
+    {
+        x = BM_.x;
+        y = BM_.y;
+        sum = BM_.sum;
+    }
 };
 
 // シンプルなブロックマッチング グレースケール
@@ -532,7 +549,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     int dist;
     double depth;
     int BM_size = 0;
-    int sam = 0;
+    int sum = 0;
     int y = origin_y;
 
     int start_x = 0;
@@ -561,9 +578,9 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
         if (x < src.cols)
         {
             // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
-            match_Result.resize(BM_size + 1);
-            match_Result[BM_size].x = x;
-            match_Result[BM_size].y = y;
+            // match_Result.resize(BM_size + 1);
+            // match_Result[BM_size].x = x;
+            // match_Result[BM_size].y = y;
 
             // std::cout << "start block matching" << std::endl;
             for (int i = 0; i < block.cols; i++)
@@ -573,29 +590,30 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
                     if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                     {
                         // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                        sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                        sum += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
                     }
                 }
             }
-            match_Result[BM_size].sam = sam;
-            // std::cout << "sam " << sam << std::endl;
-            sam = 0;
+            // match_Result[BM_size].sum = sum;
+            match_Result.push_back(BM(x, y, sum));
+            // std::cout << "sum " << sum << std::endl;
+            sum = 0;
             BM_size++;
         }
     }
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-              { return alpha.sam < beta.sam; });
+              { return alpha.sum < beta.sum; });
 
     if (debug == sim_BM_check)
-        std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size();
+        std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size();
 
     /*
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
     BM_size = 0;
     match_Result.resize(BM_size);
-    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size() << std::endl;
 
     for (int x = sx - block.cols; x < sx + block.cols; x++)
     {
@@ -614,19 +632,19 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
                     if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                     {
                         // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                        sam += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
+                        sum += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
                     }
                 }
             }
-            match_Result[BM_size].sam = sam;
-            // std::cout << "sam " << sam << std::endl;
-            sam = 0;
+            match_Result[BM_size].sum = sum;
+            // std::cout << "sum " << sum << std::endl;
+            sum = 0;
             BM_size++;
         }
     }
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-              { return alpha.sam < beta.sam; });
+              { return alpha.sum < beta.sum; });
     //*/
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     if (debug == sim_BM_check)
@@ -649,7 +667,7 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     int dist;
     double depth;
     int BM_size = 0;
-    int sam = 0;
+    int sum = 0;
     int y = origin_y;
 
     int start_x = 0;
@@ -696,26 +714,26 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
                     if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                     {
                         // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                        sam += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
+                        sum += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
                     }
                 }
             }
-            match_Result[BM_size].sam = sam;
-            // std::cout << "sam " << sam << std::endl;
-            sam = 0;
+            match_Result[BM_size].sum = sum;
+            // std::cout << "sum " << sum << std::endl;
+            sum = 0;
             BM_size++;
         }
     }
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-              { return alpha.sam < beta.sam; });
+              { return alpha.sum < beta.sum; });
 
     ///*
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
     BM_size = 0;
     match_Result.resize(BM_size);
-    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size() << std::endl;
 
     for (int x = sx - block.cols; x < sx + block.cols; x++)
     {
@@ -734,19 +752,19 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
                     if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                     {
                         // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                        sam += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
+                        sum += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
                     }
                 }
             }
-            match_Result[BM_size].sam = sam;
-            // std::cout << "sam " << sam << std::endl;
-            sam = 0;
+            match_Result[BM_size].sum = sum;
+            // std::cout << "sum " << sum << std::endl;
+            sum = 0;
             BM_size++;
         }
     }
 
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-              { return alpha.sam < beta.sam; });
+              { return alpha.sum < beta.sum; });
     //*/
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     // std::cout << " distance = " << dist << std::endl;
@@ -765,7 +783,7 @@ double NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y
     int dist;
     double depth;
     int BM_size = 0;
-    int sam = 0;
+    int sum = 0;
     int k = origin_x - step;
     // if (k < 0)
     //     k = 0;
@@ -816,13 +834,13 @@ rect = src.clone();
                         if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                         {
                             // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                            sum += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
-                match_Result[BM_size].sam = sam;
-                // std::cout << "sam " << sam << std::endl;
-                sam = 0;
+                match_Result[BM_size].sum = sum;
+                // std::cout << "sum " << sum << std::endl;
+                sum = 0;
                 BM_size++;
             }
         }
@@ -854,20 +872,20 @@ rect = src.clone();
                         if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                         {
                             // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                            sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                            sum += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
                         }
                     }
                 }
-                match_Result[BM_size].sam = sam;
-                // std::cout << "sam " << sam << std::endl;
-                sam = 0;
+                match_Result[BM_size].sum = sum;
+                // std::cout << "sum " << sum << std::endl;
+                sum = 0;
                 BM_size++;
             }
         }
     }
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-              { return alpha.sam < beta.sam; });
-    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+              { return alpha.sum < beta.sum; });
+    // std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size() << std::endl;
 
     int sx = match_Result[0].x;
     int sy = match_Result[0].y;
@@ -912,20 +930,20 @@ rect = src.clone();
                                 if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                                 {
                                     // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                                    sam += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                                    sum += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
                                 }
                             }
                         }
-                        match_Result[BM_size].sam = sam;
-                        // std::cout << "sam " << sam << std::endl;
-                        sam = 0;
+                        match_Result[BM_size].sum = sum;
+                        // std::cout << "sum " << sum << std::endl;
+                        sum = 0;
                         BM_size++;
                     }
                 }
             }
             std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-                      { return alpha.sam < beta.sam; });
-            // std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+                      { return alpha.sum < beta.sum; });
+            // std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size() << std::endl;
             // std::cout << " -> match(" << match_Result[0].x << " " << match_Result[0].y << ")";
         }
         else
@@ -955,13 +973,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // P
                     match_Result.resize(BM_size + 1);
@@ -974,13 +992,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // B
                     match_Result.resize(BM_size + 1);
@@ -993,13 +1011,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                 }
                 else if (abs(sy - origin_y) == 0)
@@ -1017,13 +1035,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // C
                     match_Result.resize(BM_size + 1);
@@ -1036,13 +1054,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // D
                     match_Result.resize(BM_size + 1);
@@ -1055,13 +1073,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                 }
                 else if (abs(sy - origin_y) > 0)
@@ -1079,13 +1097,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // E
                     match_Result.resize(BM_size + 1);
@@ -1098,13 +1116,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // F
                     match_Result.resize(BM_size + 1);
@@ -1117,13 +1135,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                 }
             }
@@ -1144,13 +1162,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // O
                     match_Result.resize(BM_size + 1);
@@ -1163,13 +1181,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // N
                     match_Result.resize(BM_size + 1);
@@ -1182,13 +1200,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                 }
                 else if (abs(sy - origin_y) == 0)
@@ -1210,13 +1228,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // G
                     match_Result.resize(BM_size + 1);
@@ -1229,13 +1247,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // H
                     match_Result.resize(BM_size + 1);
@@ -1248,13 +1266,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                 }
             }
@@ -1275,13 +1293,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // M
                     match_Result.resize(BM_size + 1);
@@ -1294,13 +1312,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // L
                     match_Result.resize(BM_size + 1);
@@ -1313,13 +1331,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                 }
                 else if (abs(sy - origin_y) == 0)
@@ -1337,13 +1355,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // K
                     match_Result.resize(BM_size + 1);
@@ -1356,13 +1374,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // J
                     match_Result.resize(BM_size + 1);
@@ -1375,13 +1393,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                 }
                 else if (abs(sy - origin_y) > 0)
@@ -1399,13 +1417,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // I
                     match_Result.resize(BM_size + 1);
@@ -1418,13 +1436,13 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                     // J
                     match_Result.resize(BM_size + 1);
@@ -1437,19 +1455,19 @@ rect = src.clone();
                             if (sx + i >= 0 && sy + j >= 0 && sy + j < src.rows && sx + i < src.cols)
                             {
                                 // std::cout << sx + i << " " << sy + j << " " << src.at<unsigned char>(sy + j, sx + i) << " " << block.at<unsigned char>(j, i) << std::endl;
-                                sam += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
+                                sum += abs(src.at<unsigned char>(sy + j, sx + i) - block.at<unsigned char>(j, i));
                             }
                         }
                     }
-                    match_Result[BM_size].sam = sam;
-                    // std::cout << sam << std::endl;
-                    sam = 0;
+                    match_Result[BM_size].sum = sum;
+                    // std::cout << sum << std::endl;
+                    sum = 0;
                     BM_size++;
                 }
             }
             std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
-                      { return alpha.sam < beta.sam; });
-            // std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sam << " " << match_Result.size() << std::endl;
+                      { return alpha.sum < beta.sum; });
+            // std::cout << "origin point (" << sx << " " << sy << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size() << std::endl;
             // std::cout << " -> second match(" << match_Result[0].x << " " << match_Result[0].y << ")     distance = " << sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].y))) << std::endl;
             dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
             // std::cout << " distance = " << dist << std::endl;
@@ -1473,7 +1491,7 @@ rect = src.clone();
     return depth;
 }
 
-// ブロックマッチングをさせるクラス 後々使うかも
+// ブロックマッチングの結果を保持するマルチスレッド用のクラス
 class BLOCK_MATCHING
 {
 public:
@@ -1502,6 +1520,24 @@ public:
                   << " " << origin_x << " " << origin_y << " " << depth << std::endl;
     }
 };
+
+void get_depth(cv::Mat &src, cv::Mat &dst)
+{
+    cv::Mat copy = src.clone();
+    int H;
+
+    for (int y = 0; y < copy.rows; y++)
+    {
+        for (int x = 0; x < copy.cols; x++)
+        {
+            H = copy.at<cv::Vec3b>(y, x)[0];
+            if (H / 20 > 2)
+                copy.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+        }
+    }
+    dst = copy.clone();
+}
+
 // スレッドプール
 worker_pool<ThreadCount> worker;
 
@@ -1661,7 +1697,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
 
     for (int i = 0; i < vec_bm.size(); i++)
     {
-        depth_H = vec_bm[i].depth * 20;
+        depth_H = vec_bm[i].depth * DISTANSE;
         if (depth_H > 150)
             depth_H = 150;
         if (depth_H < 0)
@@ -1675,11 +1711,19 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
     std::cout << "synchronous" << std::endl;
 
     cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
-    if (LorR == R2L)
-        cv::imshow("depth R2L", depth_map_HSV);
-    else if (LorR == L2R)
-        cv::imshow("depth L2R", depth_map_HSV);
+    cv::Mat nearline;
+    get_depth(depth_map_HSV, nearline);
 
+    if (LorR == R2L)
+    {
+        cv::imshow("depth R2L", depth_map_HSV);
+        cv::imshow("depth R2L nearline", nearline);
+    }
+    else if (LorR == L2R)
+    {
+        cv::imshow("depth L2R", depth_map_HSV);
+        cv::imshow("depth L2R nearline", nearline);
+    }
     //  std::cout << "block matching time = ";
 }
 
@@ -1764,7 +1808,7 @@ void xmlRead()
         }
         clock_t begin = clock();
 
-        //std::cout << "start block_matching" << std::endl;
+        // std::cout << "start block_matching" << std::endl;
         /*
         worker.run([distort2, distort, BLOCK_MODE, R2L, &b_time]()
                    {
@@ -1779,18 +1823,18 @@ void xmlRead()
         while (b_time < 2)*/
         ;
 #pragma omp section
-        //block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
+        // block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
 #pragma omp section
-        //block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
-        //std::cout << "end block_matching" << std::endl;
-        //clock_t end = clock();
-        // print_elapsed_time(begin, end);
+        // block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
+        // std::cout << "end block_matching" << std::endl;
+        // clock_t end = clock();
+        //  print_elapsed_time(begin, end);
 
         cv::imshow("a", distort);
         cv::imshow("b", distort2);
 
-        //cv::imwrite(make_spath("images/2023_1128/left", count, tag), distort);
-        //cv::imwrite(make_spath("images/2023_1128/right", count, tag), distort2);
+        // cv::imwrite(make_spath("images/2023_1128/left", count, tag), distort);
+        // cv::imwrite(make_spath("images/2023_1128/right", count, tag), distort2);
         std::cout << "write images " << count << std::endl;
         count++;
 
@@ -1931,18 +1975,18 @@ void thread_pool_test()
 
 void test_cvtLBP()
 {
-    cv::Mat left = cv::imread("images/test_img/left.JPG", BLOCK_MODE);
-    cv::Mat right = cv::imread("images/test_img/right.JPG", BLOCK_MODE);
+    cv::Mat left = cv::imread("images/test_img/left03.JPG", BLOCK_MODE);
+    cv::Mat right = cv::imread("images/test_img/right03.JPG", BLOCK_MODE);
 
     cv::resize(left, left, cv::Size(), 0.25, 0.25);
     cv::resize(right, right, cv::Size(), 0.25, 0.25);
 
     // cvt_LBP(left, left);
     // cvt_LBP(right, right);
-    // cv::Canny(left, left, 10, 100);
-    // cv::Canny(right, right, 10, 100);
-    // cv::medianBlur(left, left, 3);
-    // cv::medianBlur(right, right, 3);
+    //  cv::Canny(left, left, 10, 100);
+    //  cv::Canny(right, right, 10, 100);
+    //  cv::medianBlur(left, left, 3);
+    //  cv::medianBlur(right, right, 3);
 
     std::cout << "blockmatching" << std::endl;
     clock_t begin = clock();
@@ -1998,10 +2042,10 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-     xmlRead();
+    // xmlRead();
     // subMat();
     // thread_pool_test();
-    // test_cvtLBP();
-    //test_Mat();
+    test_cvtLBP();
+    // test_Mat();
     return 0;
 }
