@@ -37,11 +37,18 @@ std::string tag = ".jpg";
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
-const int WIDTH = 1280; // 1280 896
-const int HEIGHT = 720; // 720 504
-int DISTANSE = 10;      // H = 距離ｘ倍率
+const int WIDTH = 896; // 1280 896
+const int HEIGHT = 504; // 720 504
+int D_MAG = 30;      // H = 距離ｘ倍率
 static std::mutex m;
 
+int FOCUS =24;          //焦点 mm
+float IS_WIDTH = 4.8;   //撮像素子の横 1/3レンズなら4.8mm
+float IS_HEIGHT = 3.6;  //撮像素子の縦 1/3レンズなら3.6mm
+float PXL_WIDTH = (IS_WIDTH/WIDTH)*1000;//1pixelあたりの横の長さ mm
+float PXL_HEIGHT = (IS_HEIGHT/HEIGHT)*1000;//1pixelあたりの縦の長さ mm
+int CAM_DIS = 10;       //カメラ間の距離 1cm
+double D_CALI = (FOCUS * 1000 * 7 * 10) / (PXL_WIDTH * 1000);//距離を求めるのに必要な定数項 mで換算 式(焦点(mm) * カメラ間距離(cm))/(1pixel長(mm)*画像内の距離)
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
@@ -523,18 +530,31 @@ public:
     int sum;
 
 public:
-    BM(const int x, const int y, const int sum)
+    BM()
     {
-        this->x = x;
-        this->y = y;
-        this->sum = sum;
     }
 
-    BM(const BM &BM_)
+public:
+    BM(const int origin_x, const int origin_y, const int s)
     {
-        x = BM_.x;
-        y = BM_.y;
-        sum = BM_.sum;
+        x = origin_x;
+        y = origin_y;
+        sum = s;
+    }
+
+public:
+    BM(const BM &BM)
+    {
+        x = BM.x;
+        y = BM.y;
+        sum = BM.sum;
+    }
+
+public:
+    void get_ELEMENTS()
+    {
+        std::cout << "x, y, sum "
+                  << " " << x << " " << y << " " << sum << std::endl;
     }
 };
 
@@ -650,7 +670,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     if (debug == sim_BM_check)
         std::cout << " distance = " << dist;
 
-    depth = (24 * 1000 * 7 * 10 * 1000) / (6.25 * dist) / 1000000;
+    depth = D_CALI/dist;
     if (debug == sim_BM_check)
         std::cout << " depth = " << depth << std::endl;
 
@@ -696,9 +716,9 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
         if (x < src.cols)
         {
             // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
-            match_Result.resize(BM_size + 1);
-            match_Result[BM_size].x = x;
-            match_Result[BM_size].y = y;
+            // match_Result.resize(BM_size + 1);
+            // match_Result[BM_size].x = x;
+            // match_Result[BM_size].y = y;
             /*
             rect = src.clone();
             cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
@@ -718,7 +738,9 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
                     }
                 }
             }
-            match_Result[BM_size].sum = sum;
+            // match_Result[BM_size].sum = sum;
+            match_Result.push_back(BM(x, y, sum));
+
             // std::cout << "sum " << sum << std::endl;
             sum = 0;
             BM_size++;
@@ -769,13 +791,14 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     // std::cout << " distance = " << dist << std::endl;
 
-    depth = ((24 * 1000 * 7 * 10 * 1000) / (6.25 * dist)) / 1000000;
+    depth = D_CALI/dist;
     // std::cout << "depth = " << depth << std::endl;
 
     return depth;
 }
 
 // グレースケール画像のブロックマッチング アルゴリズムはNTSS法を使用
+/*
 double NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int step)
 {
     cv::Mat rect = src.clone();
@@ -820,11 +843,11 @@ double NTSS(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = x;
                 match_Result[BM_size].y = y;
-                /*
+
 rect = src.clone();
                 cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
                 cv::imshow("dd", rect);
-                const int key = cv::waitKey(10);*/
+                const int key = cv::waitKey(10);
 
                 // std::cout << "start block matching" << std::endl;
                 for (int i = 0; i < block.cols; i++)
@@ -858,11 +881,11 @@ rect = src.clone();
                 match_Result.resize(BM_size + 1);
                 match_Result[BM_size].x = x;
                 match_Result[BM_size].y = y;
-                /*
+
 rect = src.clone();
                 cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
                 cv::imshow("dd", rect);
-                const int key = cv::waitKey(10);*/
+                const int key = cv::waitKey(10);
 
                 // std::cout << "start block matching" << std::endl;
                 for (int i = 0; i < block.cols; i++)
@@ -916,11 +939,11 @@ rect = src.clone();
                         match_Result.resize(BM_size + 1);
                         match_Result[BM_size].x = x;
                         match_Result[BM_size].y = y;
-                        /*
+
 rect = src.clone();
                         cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
                         cv::imshow("dd", rect);
-                        const int key = cv::waitKey(10);*/
+                        const int key = cv::waitKey(10);
 
                         // std::cout << "start block matching" << std::endl;
                         for (int i = 0; i < block.cols; i++)
@@ -949,13 +972,13 @@ rect = src.clone();
         else
         {
             // std::cout << "near distance" << std::endl;
-            /*
-                A P O N M
-                B 1 4 7 L
-                C 2 5 8 K
-                D 3 6 9 J
-                E F G H I
-            */
+
+            //    A P O N M
+            //    B 1 4 7 L
+            //    C 2 5 8 K
+            //    D 3 6 9 J
+            //    E F G H I
+
             if (abs(sx - origin_x) < 0)
             {
                 if (abs(sy - origin_y) < 0)
@@ -1490,6 +1513,7 @@ rect = src.clone();
 
     return depth;
 }
+*/
 
 // ブロックマッチングの結果を保持するマルチスレッド用のクラス
 class BLOCK_MATCHING
@@ -1506,11 +1530,11 @@ public:
         depth = d;
     }
 
-    BLOCK_MATCHING(const BLOCK_MATCHING &BM_)
+    BLOCK_MATCHING(const BLOCK_MATCHING &B_M)
     {
-        origin_x = BM_.origin_x;
-        origin_y = BM_.origin_y;
-        depth = BM_.depth;
+        origin_x = B_M.origin_x;
+        origin_y = B_M.origin_y;
+        depth = B_M.depth;
     }
 
 public:
@@ -1521,18 +1545,24 @@ public:
     }
 };
 
-void get_depth(cv::Mat &src, cv::Mat &dst)
+// 深度マップから元画像ないの特定の距離のものを抽出する。
+void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
 {
-    cv::Mat copy = src.clone();
+    cv::Mat copy = cv::Mat(src.rows, src.cols, CV_8UC1);
+    copy = cv::Scalar::all(0);
     int H;
 
     for (int y = 0; y < copy.rows; y++)
     {
         for (int x = 0; x < copy.cols; x++)
         {
-            H = copy.at<cv::Vec3b>(y, x)[0];
-            if (H / 20 > 2)
-                copy.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+            H = src.at<cv::Vec3b>(y, x)[0];
+            if (H / D_MAG > 1)
+                copy.at<unsigned char>(y, x) = 0;
+            else
+            {
+                copy.at<unsigned char>(y, x) = origin.at<unsigned char>(y, x);
+            }
         }
     }
     dst = copy.clone();
@@ -1542,7 +1572,7 @@ void get_depth(cv::Mat &src, cv::Mat &dst)
 worker_pool<ThreadCount> worker;
 
 // ブロックマッチングの準備をする関数
-void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, int mode, int LorR)
+void block_Matching(cv::Mat &block, const cv::Mat &src, int block_size, int mode, int LorR)
 {
     int times = 0;
     int sum = 4;
@@ -1697,7 +1727,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
 
     for (int i = 0; i < vec_bm.size(); i++)
     {
-        depth_H = vec_bm[i].depth * DISTANSE;
+        depth_H = vec_bm[i].depth * D_MAG;
         if (depth_H > 150)
             depth_H = 150;
         if (depth_H < 0)
@@ -1712,7 +1742,7 @@ void block_Matching(const cv::Mat &block, const cv::Mat &src, int block_size, in
 
     cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
     cv::Mat nearline;
-    get_depth(depth_map_HSV, nearline);
+    get_depth(depth_map_HSV, nearline, block);
 
     if (LorR == R2L)
     {
@@ -1975,11 +2005,11 @@ void thread_pool_test()
 
 void test_cvtLBP()
 {
-    cv::Mat left = cv::imread("images/test_img/left03.JPG", BLOCK_MODE);
-    cv::Mat right = cv::imread("images/test_img/right03.JPG", BLOCK_MODE);
+    cv::Mat left = cv::imread("images/test_img/left.JPG", BLOCK_MODE);
+    cv::Mat right = cv::imread("images/test_img/right.JPG", BLOCK_MODE);
 
-    cv::resize(left, left, cv::Size(), 0.25, 0.25);
-    cv::resize(right, right, cv::Size(), 0.25, 0.25);
+    cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
+    cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
 
     // cvt_LBP(left, left);
     // cvt_LBP(right, right);
