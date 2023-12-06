@@ -39,16 +39,17 @@ int Cam_dir_num = 2;
 
 const int WIDTH = 896; // 1280 896
 const int HEIGHT = 504; // 720 504
-int D_MAG = 30;      // H = 距離ｘ倍率
+int D_MAG = 15;      // H = 距離ｘ倍率
 static std::mutex m;
 
 int FOCUS =24;          //焦点 mm
 float IS_WIDTH = 4.8;   //撮像素子の横 1/3レンズなら4.8mm
 float IS_HEIGHT = 3.6;  //撮像素子の縦 1/3レンズなら3.6mm
-float PXL_WIDTH = (IS_WIDTH/WIDTH)*1000;//1pixelあたりの横の長さ mm
-float PXL_HEIGHT = (IS_HEIGHT/HEIGHT)*1000;//1pixelあたりの縦の長さ mm
-int CAM_DIS = 10;       //カメラ間の距離 1cm
-double D_CALI = (FOCUS * 1000 * 7 * 10) / (PXL_WIDTH * 1000);//距離を求めるのに必要な定数項 mで換算 式(焦点(mm) * カメラ間距離(cm))/(1pixel長(mm)*画像内の距離)
+float PXL_WIDTH = (IS_WIDTH/WIDTH);//1pixelあたりの横の長さ mm
+float PXL_HEIGHT = (IS_HEIGHT/HEIGHT);//1pixelあたりの縦の長さ mm
+int CAM_DIS = 10;       //カメラ間の距離 10cm
+double D_CALI = (FOCUS * CAM_DIS * 10) / (PXL_WIDTH*1000);//距離を求めるのに必要な定数項 mで換算 式(焦点(mm) * カメラ間距離(cm))/(1pixel長(mm)*画像内の距離)
+
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
@@ -579,11 +580,11 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = WIDTH / 3;
+        search_lange = WIDTH / 2;
     }
     else if (LorR == L2R)
     {
-        start_x = origin_x - WIDTH / 3;
+        start_x = origin_x - WIDTH / 2;
         search_lange = 100;
     }
     end_lange = origin_x + search_lange;
@@ -697,11 +698,11 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = WIDTH / 3;
+        search_lange = WIDTH / 2;
     }
     else if (LorR == L2R)
     {
-        start_x = origin_x - WIDTH / 3;
+        start_x = origin_x - WIDTH / 2;
         search_lange = 100;
     }
     end_lange = origin_x + search_lange;
@@ -2005,8 +2006,8 @@ void thread_pool_test()
 
 void test_cvtLBP()
 {
-    cv::Mat left = cv::imread("images/test_img/left.JPG", BLOCK_MODE);
-    cv::Mat right = cv::imread("images/test_img/right.JPG", BLOCK_MODE);
+    cv::Mat left = cv::imread("images/test_img/left04.JPG", BLOCK_MODE);
+    cv::Mat right = cv::imread("images/test_img/right04.JPG", BLOCK_MODE);
 
     cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
     cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
