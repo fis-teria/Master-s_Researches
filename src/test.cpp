@@ -37,18 +37,18 @@ std::string tag = ".jpg";
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
-const int WIDTH = 896; // 1280 896
+const int WIDTH = 896;  // 1280 896
 const int HEIGHT = 504; // 720 504
-int D_MAG = 15;      // H = 距離ｘ倍率
+int D_MAG = 15;         // H = 距離ｘ倍率(H<150)  ex) 最長距離を10mにしたければ倍率を15にすればよい
 static std::mutex m;
 
-int FOCUS =24;          //焦点 mm
-float IS_WIDTH = 4.8;   //撮像素子の横 1/3レンズなら4.8mm
-float IS_HEIGHT = 3.6;  //撮像素子の縦 1/3レンズなら3.6mm
-float PXL_WIDTH = (IS_WIDTH/WIDTH);//1pixelあたりの横の長さ mm
-float PXL_HEIGHT = (IS_HEIGHT/HEIGHT);//1pixelあたりの縦の長さ mm
-int CAM_DIS = 10;       //カメラ間の距離 10cm
-double D_CALI = (FOCUS * CAM_DIS * 10) / (PXL_WIDTH*1000);//距離を求めるのに必要な定数項 mで換算 式(焦点(mm) * カメラ間距離(cm))/(1pixel長(mm)*画像内の距離)
+int FOCUS = 24;                                              // 焦点 mm
+float IS_WIDTH = 4.8;                                        // 撮像素子の横 1/3レンズなら4.8mm
+float IS_HEIGHT = 3.6;                                       // 撮像素子の縦 1/3レンズなら3.6mm
+float PXL_WIDTH = (IS_WIDTH / WIDTH);                        // 1pixelあたりの横の長さ mm
+float PXL_HEIGHT = (IS_HEIGHT / HEIGHT);                     // 1pixelあたりの縦の長さ mm
+int CAM_DIS = 10;                                            // カメラ間の距離 10cm
+double D_CALI = (FOCUS * CAM_DIS * 10) / (PXL_WIDTH * 1000); // 距離を求めるのに必要な定数項 mで換算 式(焦点(mm) * カメラ間距離(cm))/(1pixel長(mm)*画像内の距離)
 
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
@@ -383,7 +383,7 @@ std::string make_spath(std::string dir, int var, std::string tag)
 void print_elapsed_time(clock_t begin, clock_t end)
 {
     float elapsed = (float)(end - begin) / CLOCKS_PER_SEC;
-    printf("Elapsed Time: %15.7f sec\n", elapsed);
+    printf("Elapsed Time: %15.15f sec\n", elapsed);
 }
 
 // LBP特徴にかけるフィルター
@@ -671,7 +671,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     if (debug == sim_BM_check)
         std::cout << " distance = " << dist;
 
-    depth = D_CALI/dist;
+    depth = D_CALI / dist;
     if (debug == sim_BM_check)
         std::cout << " depth = " << depth << std::endl;
 
@@ -792,7 +792,7 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     // std::cout << " distance = " << dist << std::endl;
 
-    depth = D_CALI/dist;
+    depth = D_CALI / dist;
     // std::cout << "depth = " << depth << std::endl;
 
     return depth;
@@ -2004,20 +2004,20 @@ void thread_pool_test()
     print_elapsed_time(begin, end);
 }
 
-void test_cvtLBP()
+void test_img()
 {
-    cv::Mat left = cv::imread("images/test_img/left04.JPG", BLOCK_MODE);
-    cv::Mat right = cv::imread("images/test_img/right04.JPG", BLOCK_MODE);
+    cv::Mat left = cv::imread("images/test_img/left05.JPG", BLOCK_MODE);
+    cv::Mat right = cv::imread("images/test_img/right05.JPG", BLOCK_MODE);
 
     cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
     cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
 
     // cvt_LBP(left, left);
-    // cvt_LBP(right, right);
-    //  cv::Canny(left, left, 10, 100);
-    //  cv::Canny(right, right, 10, 100);
-    //  cv::medianBlur(left, left, 3);
-    //  cv::medianBlur(right, right, 3);
+    //  cvt_LBP(right, right);
+    //   cv::Canny(left, left, 10, 100);
+    //   cv::Canny(right, right, 10, 100);
+    //   cv::medianBlur(left, left, 3);
+    //   cv::medianBlur(right, right, 3);
 
     std::cout << "blockmatching" << std::endl;
     clock_t begin = clock();
@@ -2067,6 +2067,44 @@ void test_Mat()
         // break; // whileループから抜ける．
     }
 }
+
+void test_LBP()
+{
+    cv::Mat img = cv::imread("images/test_img/left05.JPG", BLOCK_MODE);
+    cv::Mat lbp;
+    cvt_LBP(img, lbp);
+    std::ofstream outputfile("logs/LBP_elements/lbp.txt"); // add std::ios::app
+
+    cv::resize(lbp,lbp, cv::Size(WIDTH, HEIGHT));
+
+    cv::Vec3b a = 0;
+    cv::Vec3b b = 0;
+    cv::Vec3b *src; 
+    clock_t begin = clock();
+    for (int y = 0; y < lbp.rows; y++)
+    {
+        for (int x = 0; x < lbp.cols; x++)
+        {
+            b = lbp.at<cv::Vec3b>(y, x);
+        }
+    }
+    clock_t end = clock();
+    print_elapsed_time(begin, end);
+
+    begin = clock();
+    for (int y = 0; y < lbp.rows; y++)
+    {
+        src = lbp.ptr<cv::Vec3b>(y);
+        for (int x = 0; x < lbp.cols; x++)
+        {
+            //outputfile << (int)src[x] << std::endl;
+            a = src[x];
+        }
+    }
+    end = clock();
+    print_elapsed_time(begin, end);
+    outputfile.close();
+}
 int main()
 {
     unsigned int thread_num = std::thread::hardware_concurrency();
@@ -2076,7 +2114,8 @@ int main()
     // xmlRead();
     // subMat();
     // thread_pool_test();
-    test_cvtLBP();
+    // test_img();
     // test_Mat();
+    test_LBP();
     return 0;
 }
