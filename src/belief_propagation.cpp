@@ -96,8 +96,8 @@ public:
         std::vector<double> compatibility_1 = {std::exp(-beta * std::abs(1.0 - 0.0)), std::exp(-beta * std::abs(1.0 - 1.0))};
 
         std::vector<double> messageResult = {
-            std::sum(neighborMessage[0] * compatibility_0[0], neighborMessage[1] * compatibility_1[0]),
-            std::sum(neighborMessage[0] * compatibility_0[1], neighborMessage[1] * compatibility_1[1])};
+            (neighborMessage[0] * compatibility_0[0]) + (neighborMessage[1] * compatibility_1[0]),
+            (neighborMessage[0] * compatibility_0[1]) + (neighborMessage[1] * compatibility_1[1])};
 
         double sumMessageResult = messageResult[0] + messageResult[1];
         messageResult[0] /= sumMessageResult;
@@ -133,16 +133,16 @@ public:
     std::unordered_map<int, Node *> id; // ノードのID
 
     // MRFにノードを追加する
-    void addNode(int id, Node *node)
+    void addNode(int i, Node *node)
     {
         nodes.push_back(node);
-        this->id[id] = node;
+        this->id[i] = node;
     }
 
     // IDに応じたノードを返す
-    Node *getNode(int id)
+    Node *getNode(int i)
     {
-        return id[id];
+        return id[i];
     }
 
     // 全部のノードを返す
@@ -183,15 +183,18 @@ public:
     }
 };
 
-MRF generateBeliefNetwork(const cv::Mat& image) {
+MRF generateBeliefNetwork(const cv::Mat &image)
+{
     MRF network;
     int height = image.rows;
     int width = image.cols;
 
-    for (int i = 0; i < height; ++i) {
-        for (int j = 0; j < width; ++j) {
+    for (int i = 0; i < height; ++i)
+    {
+        for (int j = 0; j < width; ++j)
+        {
             int nodeID = width * i + j;
-            Node* node = new Node(nodeID);  // Assuming Node is a class that you have defined
+            Node *node = new Node(nodeID); // Assuming Node is a class that you have defined
             network.addNode(nodeID, node);
         }
     }
@@ -199,13 +202,17 @@ MRF generateBeliefNetwork(const cv::Mat& image) {
     int dy[] = {-1, 0, 0, 1};
     int dx[] = {0, -1, 1, 0};
 
-    for (int i = 0; i < height; ++i) {
-        for (int j = 0; j < width; ++j) {
-            Node* node = network.getNode(width * i + j);
+    for (int i = 0; i < height; ++i)
+    {
+        for (int j = 0; j < width; ++j)
+        {
+            Node *node = network.getNode(width * i + j);
 
-            for (int k = 0; k < 4; ++k) {
-                if (i + dy[k] >= 0 && i + dy[k] < height && j + dx[k] >= 0 && j + dx[k] < width) {
-                    Node* neighbor = network.getNode(width * (i + dy[k]) + j + dx[k]);
+            for (int k = 0; k < 4; ++k)
+            {
+                if (i + dy[k] >= 0 && i + dy[k] < height && j + dx[k] >= 0 && j + dx[k] < width)
+                {
+                    Node *neighbor = network.getNode(width * (i + dy[k]) + j + dx[k]);
                     node->addNeighbor(neighbor);
                 }
             }
@@ -249,19 +256,50 @@ void cvt_LBP(const cv::Mat &src, cv::Mat &lbp)
     lbp = dst.clone();
 }
 
-int main() {
+void wb_diviser(cv::Mat src, cv::Mat &dst)
+{
+    dst = cv::Mat(src.rows,src.cols, CV_8UC1);
+    cv::Mat copy = src.clone();
+    for (int y = 0; y < copy.rows; y++)
+    {
+        for (int x = 0; x < copy.cols; x++)
+        {
+            if ((int)copy.at<unsigned char>(y, x) >= 150)
+            {
+                copy.at<unsigned char>(y, x) = 255;
+            }
+            else
+            {
+                copy.at<unsigned char>(y, x) = 0;
+            }
+        }
+    }
+    dst = copy.clone();
+}
+int main()
+{
     // 使用データ
-    cv::Mat image = cv::imread("Lenna.png", cv::IMREAD_GRAYSCALE);
-    cv::Mat binary;
-    cvt_LBP(image, binary)
-    // MRF構築
-    MRF network = generateBeliefNetwork(image);  // Assuming generateBeliefNetwork is a function that you have defined
+    cv::Mat image = cv::imread("images/test_img/left.JPG", cv::IMREAD_GRAYSCALE);
+    cv::Mat noise, lbp;
+    cv::resize(image, image, cv::Size(1280, 720));
+    //noise = image.clone();
+    cvt_LBP(image, lbp);
+    //image = lbp.clone();
+    wb_diviser(lbp, noise);
+    //cv::imshow("a", image);
+    image = noise.clone();
+
+     //cv::Canny(noise, noise, 10, 100);
+    //  MRF構築
+    MRF network = generateBeliefNetwork(image); // Assuming generateBeliefNetwork is a function that you have defined
 
     // 観測値（画素値）から尤度を作成
-    for (int i = 0; i < image.rows; ++i) {
-        for (int j = 0; j < image.cols; ++j) {
-            Node* node = network.getNode(image.cols * i + j);
-            node->calcLikelihood(noise.at<int>(i, j));
+    for (int i = 0; i < image.rows; i++)
+    {
+        for (int j = 0; j < image.cols; j++)
+        {
+            Node *node = network.getNode(image.cols * i + j);
+            node->calcLikelihood(noise.at<unsigned char>(i, j));
         }
     }
 
@@ -270,14 +308,22 @@ int main() {
 
     // 周辺分布は[0の確率, 1の確率]の順番
     // もし1の確率が大きければoutputの画素値を1に変える
-    cv::Mat output = cv::Mat::zeros(noise.size(), CV_8U);
+    cv::Mat output = cv::Mat(noise.rows, noise.cols, CV_8UC1);
+    output = cv::Scalar::all(0);
 
-    for (int i = 0; i < output.rows; ++i) {
-        for (int j = 0; j < output.cols; ++j) {
-            Node* node = network.getNode(output.cols * i + j);
+    for (int i = 0; i < output.rows; i++)
+    {
+        for (int j = 0; j < output.cols; j++)
+        {
+            Node *node = network.getNode(output.cols * i + j);
             std::vector<double> prob = node->prob;
-            if (prob[1] > prob[0]) {
-                output.at<uchar>(i, j) = 255;
+            if (prob[1] > prob[0])
+            {
+                output.at<unsigned char>(i, j) = 255;
+            }
+            else
+            {
+                output.at<unsigned char>(i, j) = 0;
             }
         }
     }

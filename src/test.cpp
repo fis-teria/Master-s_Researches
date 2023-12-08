@@ -2068,18 +2068,26 @@ void test_Mat()
     }
 }
 
-void test_LBP()
+void test_AcessPoint(cv::Mat lbp)
 {
-    cv::Mat img = cv::imread("images/test_img/left05.JPG", BLOCK_MODE);
-    cv::Mat lbp;
-    cvt_LBP(img, lbp);
-    std::ofstream outputfile("logs/LBP_elements/lbp.txt"); // add std::ios::app
+    cv::Vec3b a;
+    cv::Vec3b *src;
+    clock_t begin = clock();
+    for (int y = 0; y < lbp.rows; y++)
+    {
+        src = lbp.ptr<cv::Vec3b>(y);
+        for (int x = 0; x < lbp.cols; x++)
+        {
+            a = src[x];
+        }
+    }
+    clock_t end = clock();
+    print_elapsed_time(begin, end);
+}
 
-    cv::resize(lbp,lbp, cv::Size(WIDTH, HEIGHT));
-
-    cv::Vec3b a = 0;
-    cv::Vec3b b = 0;
-    cv::Vec3b *src; 
+void test_AcessAt(const cv::Mat lbp)
+{
+    cv::Vec3b b;
     clock_t begin = clock();
     for (int y = 0; y < lbp.rows; y++)
     {
@@ -2090,20 +2098,50 @@ void test_LBP()
     }
     clock_t end = clock();
     print_elapsed_time(begin, end);
+}
 
-    begin = clock();
-    for (int y = 0; y < lbp.rows; y++)
+void wb_diviser(cv::Mat src, cv::Mat &dst)
+{
+    cv::Mat copy = src.clone();
+    for (int y = 0; y < copy.rows; y++)
     {
-        src = lbp.ptr<cv::Vec3b>(y);
-        for (int x = 0; x < lbp.cols; x++)
+        for (int x = 0; x < copy.cols; x++)
         {
-            //outputfile << (int)src[x] << std::endl;
-            a = src[x];
+            if ((int)copy.at<unsigned char>(y, x) >= 150)
+            {
+                copy.at<unsigned char>(y, x) = 255;
+                std::cout << (int)copy.at<unsigned char>(y, x) << std::endl;
+            }
+            else
+            {
+                copy.at<unsigned char>(y, x) = 0;
+            }
         }
     }
-    end = clock();
-    print_elapsed_time(begin, end);
-    outputfile.close();
+    dst = copy.clone();
+}
+
+void test_LBP() // matにおける画素のアクセス速度の比較
+{
+    cv::Mat img = cv::imread("images/test_img/left.JPG", BLOCK_MODE);
+    cv::Mat lbp;
+    cv::resize(img, img, cv::Size(WIDTH, HEIGHT));
+    cvt_LBP(img, lbp);
+
+    cv::Mat wb = cv::Mat(img.rows, img.cols, CV_8UC1);
+
+    wb_diviser(lbp, wb);
+    for (int y = 0; y < wb.rows; y++)
+    {
+        for (int x = 0; x < wb.cols; x++)
+        {
+            if(wb.at<unsigned char>(y,x) != 255)
+                std::cout << (int)wb.at<unsigned char>(y,x) << std::endl;
+        }
+    }
+    cv::imshow("a", lbp);
+    cv::imshow("b", wb);
+    cv::waitKey(0);
 }
 int main()
 {
