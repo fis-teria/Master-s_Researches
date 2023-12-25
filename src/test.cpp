@@ -37,8 +37,19 @@ std::string tag = ".jpg";
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
-const int WIDTH = 896;  // 1280 896
-const int HEIGHT = 504; // 720 504
+/*
+    Width   Height
+    1280    720
+    1024    576
+    896     504
+    768     432
+    640     360
+    512     288
+    384     216
+*/
+
+const int WIDTH = 640;  // 1280 896
+const int HEIGHT = 320; // 720 504
 int D_MAG = 15;         // H = 距離ｘ倍率(H<150)  ex) 最長距離を10mにしたければ倍率を15にすればよい
 static std::mutex m;
 
@@ -62,6 +73,9 @@ const int vec_check = 2;
 const int thread_check = 1;
 
 const int BLOCK_MODE = NTSS_GRAY;
+
+const std::string LEFT_IMG = "images/test_img/left.JPG";
+const std::string RIGHT_IMG = "images/test_img/right.JPG";
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -1569,6 +1583,7 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
     dst = copy.clone();
 }
 
+
 // スレッドプール
 worker_pool<ThreadCount> worker;
 
@@ -2006,8 +2021,8 @@ void thread_pool_test()
 
 void test_img()
 {
-    cv::Mat left = cv::imread("images/test_img/left05.JPG", BLOCK_MODE);
-    cv::Mat right = cv::imread("images/test_img/right05.JPG", BLOCK_MODE);
+    cv::Mat left = cv::imread(LEFT_IMG, BLOCK_MODE);
+    cv::Mat right = cv::imread(RIGHT_IMG, BLOCK_MODE);
 
     cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
     cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
@@ -2152,8 +2167,8 @@ int main()
     // xmlRead();
     // subMat();
     // thread_pool_test();
-    // test_img();
+     test_img();
     // test_Mat();
-    test_LBP();
+    //test_LBP();
     return 0;
 }
