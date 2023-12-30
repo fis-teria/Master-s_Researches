@@ -376,23 +376,21 @@ std::string make_spath(std::string dir, int var, std::string tag)
     if (var < 10)
     {
         back = dir + "/00000" + std::to_string(var) + tag;
-        return back;
     }
     else if (var < 100)
     {
         back = dir + "/0000" + std::to_string(var) + tag;
-        return back;
     }
     else if (var < 1000)
     {
         back = dir + "/000" + std::to_string(var) + tag;
-        return back;
     }
     else if (var < 10000)
     {
         back = dir + "/00" + std::to_string(var) + tag;
-        return back;
     }
+    std::cout << back << std::endl;
+    return back;
 }
 
 void print_elapsed_time(clock_t begin, clock_t end)
@@ -2175,9 +2173,9 @@ void take_image()
         std::cout << std::endl;
     }
     */
-    cv::VideoCapture cap(0); // デバイスのオープン
-                             // cap.open(0);//こっちでも良い．
-                             // capの画像の解像度を変える部分 word CaptureChange
+    cv::VideoCapture cap(0, cv::CAP_V4L2); // デバイスのオープン
+                                           // cap.open(0);//こっちでも良い．
+                                           // capの画像の解像度を変える部分 word CaptureChange
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
@@ -2189,9 +2187,9 @@ void take_image()
         return;
     }
 
-    cv::VideoCapture cap2(2); // デバイスのオープン
-                              // cap.open(0);//こっちでも良い．
-                              // capの画像の解像度を変える部分 word CaptureChange
+    cv::VideoCapture cap2(2, cv::CAP_V4L2); // デバイスのオープン
+                                            // cap.open(0);//こっちでも良い．
+                                            // capの画像の解像度を変える部分 word CaptureChange
     cap2.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap2.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap2.set(cv::CAP_PROP_BUFFERSIZE, 1);
@@ -2224,16 +2222,21 @@ void take_image()
         cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
 
-        //cv::resize(distort, distort, cv::Size(WIDTH, HEIGHT));
-        //cv::resize(distort2, distort2, cv::Size(WIDTH, HEIGHT));
+        // cv::resize(distort, distort, cv::Size(WIDTH, HEIGHT));
+        // cv::resize(distort2, distort2, cv::Size(WIDTH, HEIGHT));
 
-        cv::imshow("a", distort);
-        cv::imshow("b", distort2);
+        //cv::imshow("a", distort);
+        //cv::imshow("b", distort2);
 
         std::cout << "write images " << count << std::endl;
         cv::imwrite(make_spath(fir_dir_left, count, tag), distort);
         cv::imwrite(make_spath(fir_dir_right, count, tag), distort2);
         count++;
+        const int key = cv::waitKey(300);
+        if (key == 'q' /*113*/) // qボタンが押されたとき
+        {
+            break; // whileループから抜ける．
+        }
     }
 }
 
@@ -2246,7 +2249,7 @@ int main()
     // xmlRead();
     // subMat();
     // thread_pool_test();
-    //test_img();
+    // test_img();
     // test_Mat();
     // test_LBP();
     take_image();
