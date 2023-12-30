@@ -34,6 +34,7 @@
 
 std::string dir = "images/Tsukuba0";
 std::string tag = ".jpg";
+
 int DB_dir_num = 0;
 int Cam_dir_num = 2;
 
@@ -1583,7 +1584,6 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
     dst = copy.clone();
 }
 
-
 // スレッドプール
 worker_pool<ThreadCount> worker;
 
@@ -2150,14 +2150,93 @@ void test_LBP() // matにおける画素のアクセス速度の比較
     {
         for (int x = 0; x < wb.cols; x++)
         {
-            if(wb.at<unsigned char>(y,x) != 255)
-                std::cout << (int)wb.at<unsigned char>(y,x) << std::endl;
+            if (wb.at<unsigned char>(y, x) != 255)
+                std::cout << (int)wb.at<unsigned char>(y, x) << std::endl;
         }
     }
     cv::imshow("a", lbp);
     cv::imshow("b", wb);
     cv::waitKey(0);
 }
+
+void take_image()
+{
+    std::string fir_dir_left = "images/20231231/left";
+    std::string fir_dir_right = "images/20231231/right";
+    readXml xml00 = readXml("camera/out_camera_data00.xml");
+    readXml xml02 = readXml("camera/out_camera_data02.xml");
+    /*
+    for (int x = 0; x < xml00.camera_matrix.cols; x++)
+    {
+        for (int y = 0; y < xml00.camera_matrix.rows; y++)
+        {
+            std::cout << xml00.camera_matrix.at<double>(y, x) << " ";
+        }
+        std::cout << std::endl;
+    }
+    */
+    cv::VideoCapture cap(0); // デバイスのオープン
+                             // cap.open(0);//こっちでも良い．
+                             // capの画像の解像度を変える部分 word CaptureChange
+    cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
+    cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
+    cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
+    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+
+    if (!cap.isOpened()) // カメラデバイスが正常にオープンしたか確認．
+    {
+        // 読み込みに失敗したときの処理
+        return;
+    }
+
+    cv::VideoCapture cap2(2); // デバイスのオープン
+                              // cap.open(0);//こっちでも良い．
+                              // capの画像の解像度を変える部分 word CaptureChange
+    cap2.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
+    cap2.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
+    cap2.set(cv::CAP_PROP_BUFFERSIZE, 1);
+    cap2.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+
+    if (!cap2.isOpened()) // カメラデバイスが正常にオープンしたか確認．
+    {
+        // 読み込みに失敗したときの処理
+        return;
+    }
+
+    cv::Mat frame; // 取得したフレーム
+    cv::Mat distort;
+    cv::Mat matx, maty;
+
+    cv::Mat frame2; // 取得したフレーム
+    cv::Mat distort2;
+
+    cv::Mat matx2, maty2;
+    cv::initUndistortRectifyMap(xml00.camera_matrix, xml00.distcoeffs, cv::Mat(), xml00.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx, maty);
+    cv::initUndistortRectifyMap(xml02.camera_matrix, xml02.distcoeffs, cv::Mat(), xml02.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx2, maty2);
+
+    cv::Mat f1g, f2g;
+    int count = 0;
+    while (1) // 無限ループ
+    {
+        cap >> frame;
+        cap2 >> frame2;
+
+        cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
+        cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
+
+        //cv::resize(distort, distort, cv::Size(WIDTH, HEIGHT));
+        //cv::resize(distort2, distort2, cv::Size(WIDTH, HEIGHT));
+
+        cv::imshow("a", distort);
+        cv::imshow("b", distort2);
+
+        std::cout << "write images " << count << std::endl;
+        cv::imwrite(make_spath(fir_dir_left, count, tag), distort);
+        cv::imwrite(make_spath(fir_dir_right, count, tag), distort2);
+        count++;
+    }
+}
+
 int main()
 {
     unsigned int thread_num = std::thread::hardware_concurrency();
@@ -2167,8 +2246,9 @@ int main()
     // xmlRead();
     // subMat();
     // thread_pool_test();
-     test_img();
+    //test_img();
     // test_Mat();
-    //test_LBP();
+    // test_LBP();
+    take_image();
     return 0;
 }
