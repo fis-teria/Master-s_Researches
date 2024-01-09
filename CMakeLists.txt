@@ -6,11 +6,23 @@ find_package( OpenMP )
 set(CMAKE_CXX_FLAGS "-std=c++14 ${CMAKE_CXX_FLAGS}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "-O3")
+set(CMAKE_CXX_FLAGS "-O3 -lpython")
+
 # インクルードパスの追加
+
+#add include Path
+set(WIN_INCLUDE
+    C:/local/include
+    C:/Python310/include
+)
+set(WIN_LIB
+    C:/local/lib
+    C:/Python310/libs
+)
+
 if(WIN32)
-  include_directories(C:/local/include)
-  link_directories(C:/local/lib)
+  include_directories(${WIN_INCLUDE})
+  link_directories(${WIN_LIB})
 else()
   include_directories(/usr/local/include)
   link_directories(/usr/local/lib)

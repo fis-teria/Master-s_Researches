@@ -75,8 +75,8 @@ const int thread_check = 1;
 
 const int BLOCK_MODE = NTSS_GRAY;
 
-const std::string LEFT_IMG = "images/test_img/left.JPG";
-const std::string RIGHT_IMG = "images/test_img/right.JPG";
+const std::string LEFT_IMG = "images/20231231/left/002000.jpg";
+const std::string RIGHT_IMG = "images/20231231/right/002000.jpg";
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -1586,7 +1586,7 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
 worker_pool<ThreadCount> worker;
 
 // ブロックマッチングの準備をする関数
-void block_Matching(cv::Mat &block, const cv::Mat &src, int block_size, int mode, int LorR)
+void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
 {
     int times = 0;
     int sum = 4;
@@ -1733,7 +1733,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, int block_size, int mode
             }
         }
     }
-    std::cout << "end loop" << std::endl;
+    // std::cout << "end loop" << std::endl;
     //*/
 
     clock_t end = clock();
@@ -1750,23 +1750,35 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, int block_size, int mode
         if (debug == vec_check)
             vec_bm[i].get_ELEMENTS();
         // std::cout << vec_bm[i].depth << std::endl;
-        cv::rectangle(depth_map, cv::Point(vec_bm[i].origin_x - b_size / 2, vec_bm[i].origin_y - b_size / 2), cv::Point(vec_bm[i].origin_x + b_size / 2, vec_bm[i].origin_y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+        // cv::rectangle(depth_map, cv::Point(vec_bm[i].origin_x - b_size / 2, vec_bm[i].origin_y - b_size / 2), cv::Point(vec_bm[i].origin_x + b_size / 2, vec_bm[i].origin_y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+        for (int x = vec_bm[i].origin_x - b_size / 2; x < vec_bm[i].origin_x + b_size / 2; x++)
+        {
+            for (int y = vec_bm[i].origin_y - b_size / 2; y < vec_bm[i].origin_y + b_size / 2; y++)
+            {
+                depth_map.at<cv::Vec3b>(y, x)[0] = depth_H;
+                depth_map.at<cv::Vec3b>(y, x)[1] = 255;
+                depth_map.at<cv::Vec3b>(y, x)[2] = 255;
+                // std::cout << depth_map.at<cv::Vec3b>(y,x) << std::endl;
+            }
+        }
     }
-    std::cout << "synchronous" << std::endl;
+    // std::cout << "synchronous" << std::endl;
 
     cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
-    cv::Mat nearline;
-    get_depth(depth_map_HSV, nearline, block);
+    // cv::Mat nearline;
+    // get_depth(depth_map_HSV, nearline, block);
 
     if (LorR == R2L)
     {
         cv::imshow("depth R2L", depth_map_HSV);
-        cv::imshow("depth R2L nearline", nearline);
+        // cv::imshow("depth R2L nearline", nearline);
+        dst = depth_map_HSV;
     }
     else if (LorR == L2R)
     {
         cv::imshow("depth L2R", depth_map_HSV);
-        cv::imshow("depth L2R nearline", nearline);
+        // cv::imshow("depth L2R nearline", nearline);
+        dst = depth_map_HSV;
     }
     //  std::cout << "block matching time = ";
 }
@@ -1827,6 +1839,9 @@ void xmlRead()
 
     cv::Mat f1g, f2g;
     int count = 0;
+
+    cv::Mat L2R_img, R2L_img;
+
     while (1) // 無限ループ
     {
         cap >> frame;
@@ -1867,9 +1882,9 @@ void xmlRead()
         while (b_time < 2)*/
         ;
 #pragma omp section
-        // block_Matching(distort, distort2, 3, BLOCK_MODE, R2L);
+        // block_Matching(distort, distort2, R2L_img, 3, BLOCK_MODE, R2L);
 #pragma omp section
-        // block_Matching(distort2, distort, 3, BLOCK_MODE, L2R);
+        // block_Matching(distort2, distort, L2R_img, 3, BLOCK_MODE, L2R);
         // std::cout << "end block_matching" << std::endl;
         // clock_t end = clock();
         //  print_elapsed_time(begin, end);
@@ -2022,8 +2037,10 @@ void test_img()
     cv::Mat left = cv::imread(LEFT_IMG, BLOCK_MODE);
     cv::Mat right = cv::imread(RIGHT_IMG, BLOCK_MODE);
 
-    cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
-    cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
+    cv::Mat L2R_img, R2L_img;
+
+    // cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
+    // cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
 
     // cvt_LBP(left, left);
     //  cvt_LBP(right, right);
@@ -2049,15 +2066,17 @@ void test_img()
         ;
     */
 #pragma omp section
-    block_Matching(right, left, 3, BLOCK_MODE, R2L);
+    block_Matching(right, left, R2L_img, 3, BLOCK_MODE, R2L);
 #pragma omp section
-    block_Matching(left, right, 3, BLOCK_MODE, L2R);
+    block_Matching(left, right, L2R_img, 3, BLOCK_MODE, L2R);
 
     clock_t end = clock();
     print_elapsed_time(begin, end);
 
     cv::imshow("left", left);
     cv::imshow("right", right);
+    cv::imshow("r2l", R2L_img);
+    cv::imshow("l2r", L2R_img);
     // cv::imshow("c", lbp2);
 
     const int key = cv::waitKey(0);
@@ -2225,8 +2244,8 @@ void take_image()
         // cv::resize(distort, distort, cv::Size(WIDTH, HEIGHT));
         // cv::resize(distort2, distort2, cv::Size(WIDTH, HEIGHT));
 
-        //cv::imshow("a", distort);
-        //cv::imshow("b", distort2);
+        // cv::imshow("a", distort);
+        // cv::imshow("b", distort2);
 
         std::cout << "write images " << count << std::endl;
         cv::imwrite(make_spath(fir_dir_left, count, tag), distort);
@@ -2240,6 +2259,63 @@ void take_image()
     }
 }
 
+std::string SAVE = "images/20231231/save.txt";
+
+int read_save()
+{
+    int save_num;
+    std::ifstream ifs;
+
+    ifs = std::ifstream(SAVE.c_str());
+    std::string str;
+    getline(ifs, str);
+    std::cout << str << std::endl;
+    save_num = atoi(str.c_str());
+    return save_num;
+}
+
+void save(int m)
+{
+    std::ofstream savefile;
+    savefile = std::ofstream(SAVE.c_str());
+    savefile << m << std::endl;
+    savefile.close();
+}
+void change_stereo()
+{
+    std::string fir_dir_left = "images/20231231/left";
+    std::string fir_dir_right = "images/20231231/right";
+    std::string fir_dir_left_depth = "images/20231231/left_depth";
+    std::string fir_dir_right_depth = "images/20231231/right_depth";
+
+    int load_num = read_save();
+
+    cv::Mat left, right;
+    cv::Mat L2R_img, R2L_img;
+
+    for (int i = load_num; i < 5192; i++)
+    {
+        left = cv::imread(make_spath(fir_dir_left, i, tag), 0);
+        right = cv::imread(make_spath(fir_dir_right, i, tag), 0);
+
+#pragma omp section
+        block_Matching(right, left, R2L_img, 3, BLOCK_MODE, R2L);
+#pragma omp section
+        block_Matching(left, right, L2R_img, 3, BLOCK_MODE, L2R);
+
+        cv::imwrite(make_spath(fir_dir_left_depth, i, tag), L2R_img);
+        cv::imwrite(make_spath(fir_dir_right_depth, i, tag), R2L_img);
+
+        cv::imshow("a", L2R_img);
+        const int key = cv::waitKey(30);
+        if (key == 'q' /*113*/) // qボタンが押されたとき
+        {
+            break; // whileループから抜ける．
+        }
+
+        save(i);
+    }
+}
 int main()
 {
     unsigned int thread_num = std::thread::hardware_concurrency();
@@ -2249,9 +2325,10 @@ int main()
     // xmlRead();
     // subMat();
     // thread_pool_test();
-    // test_img();
+    //test_img();
     // test_Mat();
     // test_LBP();
-    take_image();
+    // take_image();
+     change_stereo();
     return 0;
 }
