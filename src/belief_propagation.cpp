@@ -21,14 +21,6 @@
 #include <boost/foreach.hpp>
 #include <boost/lexical_cast.hpp>
 
-#define BOOST_PYTHON_STATIC_LIB
-#pragma push_macro("slots")
-#undef slots
-#include <Python.h>
-#pragma pop_macro("slots")
-#include <boost/python.hpp>
-#include <boost/python/numpy.hpp>
-
 #include <iostream>
 #include <vector>
 #include <unordered_map>

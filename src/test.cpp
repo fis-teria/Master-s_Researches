@@ -1,4 +1,5 @@
 #include <opencv2/opencv.hpp>
+
 #include <cstdio>
 #include <iostream>
 #include <fstream>
@@ -32,6 +33,24 @@
 #define OMP_PARALLEL_FOR
 #endif
 
+#if _DEBUG
+#pragma comment(lib, "opencv_core248d.lib")
+#pragma comment(lib, "opencv_highgui248d.lib")
+#pragma comment(lib, "opencv_imgproc248d.lib")
+#pragma comment(lib, "opencv_contrib248d.lib")
+#pragma comment(lib, "opencv_calib3d248d.lib")
+#pragma comment(lib, "opencv_features2d248d.lib")
+#pragma comment(lib, "opencv_nonfree248d.lib")
+#else
+#pragma comment(lib, "opencv_core248.lib")
+#pragma comment(lib, "opencv_highgui248.lib")
+#pragma comment(lib, "opencv_imgproc248.lib")
+#pragma comment(lib, "opencv_contrib248.lib")
+#pragma comment(lib, "opencv_calib3d248.lib")
+#pragma comment(lib, "opencv_features2d248.lib")
+#pragma comment(lib, "opencv_nonfree248.lib")
+#endif
+
 std::string dir = "images/Tsukuba0";
 std::string tag = ".jpg";
 
@@ -49,18 +68,18 @@ int Cam_dir_num = 2;
     384     216
 */
 
-const int WIDTH = 640;  // 1280 896
-const int HEIGHT = 320; // 720 504
-int D_MAG = 15;         // H = 距離ｘ倍率(H<150)  ex) 最長距離を10mにしたければ倍率を15にすればよい
+const int WIDTH = 640 * 2;  // 1280 896
+const int HEIGHT = 360 * 2; // 720 504
+int D_MAG = 15;             // H = 距離ｘ倍率(H<150)  ex) 最長距離を10mにしたければ倍率を15にすればよい
 static std::mutex m;
 
-int FOCUS = 24;                                              // 焦点 mm
-float IS_WIDTH = 4.8;                                        // 撮像素子の横 1/3レンズなら4.8mm
-float IS_HEIGHT = 3.6;                                       // 撮像素子の縦 1/3レンズなら3.6mm
-float PXL_WIDTH = (IS_WIDTH / WIDTH);                        // 1pixelあたりの横の長さ mm
-float PXL_HEIGHT = (IS_HEIGHT / HEIGHT);                     // 1pixelあたりの縦の長さ mm
-int CAM_DIS = 10;                                            // カメラ間の距離 10cm
-double D_CALI = (FOCUS * CAM_DIS * 10) / (PXL_WIDTH * 1000); // 距離を求めるのに必要な定数項 mで換算 式(焦点(mm) * カメラ間距離(cm))/(1pixel長(mm)*画像内の距離)
+int FOCUS = 24;                                                // 焦点 mm
+float IS_WIDTH = 4.8;                                          // 撮像素子の横 1/3レンズなら4.8mm
+float IS_HEIGHT = 3.6;                                         // 撮像素子の縦 1/3レンズなら3.6mm
+float PXL_WIDTH = (IS_WIDTH / WIDTH);                          // 1pixelあたりの横の長さ mm
+float PXL_HEIGHT = (IS_HEIGHT / HEIGHT);                       // 1pixelあたりの縦の長さ mm
+int CAM_DIS = 10;                                              // カメラ間の距離 10cm
+double D_CALI = (FOCUS * (CAM_DIS * 10)) / (PXL_WIDTH * 1000); // 距離を求めるのに必要な定数項 mで換算 式(焦点(mm) * カメラ間距離(cm))/(1pixel長(mm)*画像内の距離)
 
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
@@ -69,14 +88,14 @@ const int L2R = -1;
 const int R2L = 1;
 
 const int debug = 1;
-const int sim_BM_check = 3;
+const int sim_BM_check = 5;
 const int vec_check = 2;
 const int thread_check = 1;
 
 const int BLOCK_MODE = NTSS_GRAY;
 
-const std::string LEFT_IMG = "images/20231231/left/002000.jpg";
-const std::string RIGHT_IMG = "images/20231231/right/002000.jpg";
+const std::string LEFT_IMG = "images/20231231/left/002345.jpg";
+const std::string RIGHT_IMG = "images/20231231/right/002345.jpg";
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -1571,7 +1590,7 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
         for (int x = 0; x < copy.cols; x++)
         {
             H = src.at<cv::Vec3b>(y, x)[0];
-            if (H / D_MAG > 1)
+            if ((H / D_MAG) < 3)
                 copy.at<unsigned char>(y, x) = 0;
             else
             {
@@ -1704,7 +1723,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
     if (mode == 0)
         OMP_PARALLEL_FOR
 #pragma omp private(depth_H, depth, x, block, src)
-    for (int x = b_size / 2; x < block.cols; x += b_size)
+    for (int x = b_size / 2+block.cols/5; x < 4*block.cols/5; x += b_size)
     {
         for (int y = b_size / 2; y < block.rows; y += b_size)
         {
@@ -1750,7 +1769,8 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
         if (debug == vec_check)
             vec_bm[i].get_ELEMENTS();
         // std::cout << vec_bm[i].depth << std::endl;
-        // cv::rectangle(depth_map, cv::Point(vec_bm[i].origin_x - b_size / 2, vec_bm[i].origin_y - b_size / 2), cv::Point(vec_bm[i].origin_x + b_size / 2, vec_bm[i].origin_y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+        cv::rectangle(depth_map, cv::Point(vec_bm[i].origin_x - b_size / 2, vec_bm[i].origin_y - b_size / 2), cv::Point(vec_bm[i].origin_x + b_size / 2, vec_bm[i].origin_y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+        /*
         for (int x = vec_bm[i].origin_x - b_size / 2; x < vec_bm[i].origin_x + b_size / 2; x++)
         {
             for (int y = vec_bm[i].origin_y - b_size / 2; y < vec_bm[i].origin_y + b_size / 2; y++)
@@ -1761,6 +1781,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
                 // std::cout << depth_map.at<cv::Vec3b>(y,x) << std::endl;
             }
         }
+        */
     }
     // std::cout << "synchronous" << std::endl;
 
@@ -1786,8 +1807,8 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
 // xmlから外部関数を読み込んでキャリブレーションされた画像を映す関数
 void xmlRead()
 {
-    readXml xml00 = readXml("camera/out_camera_data00.xml");
-    readXml xml02 = readXml("camera/out_camera_data02.xml");
+    readXml xml00 = readXml("camera/out_camera_data_webcam.xml");
+    readXml xml02 = readXml("camera/out_camera_data_onda.xml");
     /*
     for (int x = 0; x < xml00.camera_matrix.cols; x++)
     {
@@ -1844,8 +1865,8 @@ void xmlRead()
 
     while (1) // 無限ループ
     {
-        cap >> frame;
-        cap2 >> frame2;
+        cap >> frame;   // left
+        cap2 >> frame2; // right
         int b_time = 0;
         // cv::imshow("win", frame);   // 画像を表示．
         // cv::imshow("win2", frame2); // 画像を表示．
@@ -1882,22 +1903,27 @@ void xmlRead()
         while (b_time < 2)*/
         ;
 #pragma omp section
-        // block_Matching(distort, distort2, R2L_img, 3, BLOCK_MODE, R2L);
+        block_Matching(distort, distort2, R2L_img, 3, BLOCK_MODE, R2L);
 #pragma omp section
-        // block_Matching(distort2, distort, L2R_img, 3, BLOCK_MODE, L2R);
+        block_Matching(distort2, distort, L2R_img, 3, BLOCK_MODE, L2R);
         // std::cout << "end block_matching" << std::endl;
         // clock_t end = clock();
         //  print_elapsed_time(begin, end);
 
         cv::imshow("a", distort);
         cv::imshow("b", distort2);
+        cv::Mat diff;
+        cv::absdiff(distort2, distort, diff);
+        cv::imshow("diff", diff);
+        cv::imshow("R2L", R2L_img);
+        cv::imshow("L2R", L2R_img);
 
         // cv::imwrite(make_spath("images/2023_1128/left", count, tag), distort);
         // cv::imwrite(make_spath("images/2023_1128/right", count, tag), distort2);
-        std::cout << "write images " << count << std::endl;
+        // std::cout << "write images " << count << std::endl;
         count++;
 
-        const int key = cv::waitKey(300);
+        const int key = cv::waitKey(10);
         if (key == 'q' /*113*/) // qボタンが押されたとき
         {
             break; // whileループから抜ける．
@@ -2039,8 +2065,8 @@ void test_img()
 
     cv::Mat L2R_img, R2L_img;
 
-    // cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
-    // cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
+    cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
+    cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
 
     // cvt_LBP(left, left);
     //  cvt_LBP(right, right);
@@ -2066,18 +2092,27 @@ void test_img()
         ;
     */
 #pragma omp section
-    block_Matching(right, left, R2L_img, 3, BLOCK_MODE, R2L);
+    block_Matching(right, left, R2L_img, sim_BM_check, BLOCK_MODE, R2L);
 #pragma omp section
-    block_Matching(left, right, L2R_img, 3, BLOCK_MODE, L2R);
+    block_Matching(left, right, L2R_img, sim_BM_check, BLOCK_MODE, L2R);
 
     clock_t end = clock();
     print_elapsed_time(begin, end);
+
+    cv::Mat nearlineL, nearlineR;
+    get_depth(L2R_img, nearlineL, left);
+    get_depth(R2L_img, nearlineR, right);
 
     cv::imshow("left", left);
     cv::imshow("right", right);
     cv::imshow("r2l", R2L_img);
     cv::imshow("l2r", L2R_img);
-    // cv::imshow("c", lbp2);
+    cv::imshow("nearlineL", nearlineL);
+    cv::imshow("nearlineR", nearlineR);
+    // cv::imwrite("images/test_img/left_d2.jpg",L2R_img);
+    // cv::imwrite("images/test_img/right_d2.jpg",R2L_img);
+    // cv::imwrite("images/test_img/nearlineL2.jpg",nearlineL);
+    //  cv::imshow("c", lbp2);
 
     const int key = cv::waitKey(0);
     if (key == 'q' /*113*/) // qボタンが押されたとき
@@ -2316,19 +2351,169 @@ void change_stereo()
         save(i);
     }
 }
+
+void sub_image()
+{
+    cv::Mat left = cv::imread(LEFT_IMG, BLOCK_MODE);
+    cv::Mat right = cv::imread(RIGHT_IMG, BLOCK_MODE);
+
+    cv::Mat L2R_img, R2L_img;
+
+    cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
+    cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
+
+    cv::absdiff(left, right, L2R_img);
+    cv::absdiff(right, left, R2L_img);
+    cv::imshow("left", left);
+    cv::imshow("right", right);
+    cv::imshow("r2l", R2L_img);
+    cv::imshow("l2r", L2R_img);
+    // cv::imwrite("images/test_img/left_d2.jpg",L2R_img);
+    // cv::imwrite("images/test_img/right_d2.jpg",R2L_img);
+    // cv::imwrite("images/test_img/nearlineL2.jpg",nearlineL);
+    //  cv::imshow("c", lbp2);
+    const int key = cv::waitKey(0);
+    if (key == 'q' /*113*/) // qボタンが押されたとき
+    {
+        // break; // whileループから抜ける．
+    }
+}
+
+/*
+void feature_matching (std::vector<cv::KeyPoint>&  keypoints1, std::vector<cv::KeyPoint>&  keypoints2, std::vector<cv::DMatch> & dmatch, cv::Mat &  img1, cv::Mat & img2)
+{
+    //Grid, Pyramid
+    //FAST，FASTX，STAR，SIFT，SURF，ORB，BRISK，MSER，GFTT，HARRIS，Dense，SimpleBlob
+    const std::string& featureDetectorName = "SURF";
+
+    //Opponent
+    //SIFT，SURF，BRIEF，BRISK，ORB，FREAK
+    const std::string& descriptorExtractorName = "SURF";
+
+    //SIFT, SURF : Euclid
+    //BRIEF, ORB, FREAK: Binary .type() CV_8U: Binary, Hamming Distance
+    //BruteForce，BruteForce-L1，BruteForce-SL2，BruteForce-Hamming，BruteForce-Hamming(2)，FlannBased
+    const std::string& descriptorMatcherName = "FlannBased";
+
+    bool crossCheck = false; // true
+
+    // SIFT・SURFモジュールの初期化
+    cv::initModule_nonfree();
+
+    // 特徴点抽出
+    cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create(featureDetectorName);
+    detector->detect(img1, keypoints1);
+    detector->detect(img2, keypoints2);
+
+    // 特徴記述
+    cv::Ptr<cv::DescriptorExtractor> extractor = cv::DescriptorExtractor::create(descriptorExtractorName);
+    cv::Mat descriptor1, descriptor2;
+    extractor->compute(img1, keypoints1, descriptor1);
+    extractor->compute(img2, keypoints2, descriptor2);
+
+    // マッチング
+    cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(descriptorMatcherName);
+    if (crossCheck)
+    {
+        // クロスチェックする場合
+        std::vector<cv::DMatch> match12, match21;
+        matcher->match(descriptor1, descriptor2, match12);
+        matcher->match(descriptor2, descriptor1, match21);
+        for (size_t i = 0; i < match12.size(); i++)
+        {
+            cv::DMatch forward = match12[i];
+            cv::DMatch backward = match21[forward.trainIdx];
+            if (backward.trainIdx == forward.queryIdx)
+                dmatch.push_back(forward);
+        }
+    }
+    else
+    {
+        // クロスチェックしない場合
+        matcher->match(descriptor1, descriptor2, dmatch);
+    }
+
+#if 1
+    // マッチング結果の表示
+    cv::Mat out;
+    cv::drawMatches(img1, keypoints1, img2, keypoints2, dmatch, out);
+    cv::imshow("matching", out);
+    cv::waitKey(1);
+    //while (cv::waitKey(1) == -1);
+#endif
+}
+
+void rectify_test()
+{
+    cv::Mat m_img1 = cv::imread (RIGHT_IMG, cv::CV_LOAD_IMAGE_GRAYSCALE );
+    cv::Mat m_img2 = cv::imread (LEFT_IMG, cv::CV_LOAD_IMAGE_GRAYSCALE );
+    if(m_img1.empty() || m_img2.empty()) return;
+
+    std::vector<Point2f>  m_imgPoints1;
+    std::vector<Point2f>  m_imgPoints2;
+    std::vector<DMatch> m_matches;
+    std::vector<KeyPoint>  m_keypoints1, m_keypoints2;
+
+    cv::Mat  dst1, dst2 ; // ステレオ平行化画像出力先
+    cv::Mat  F, H1, H2;   // F行列、ステレオ平行化のための変換行列
+    cv::Mat  ptMat1, ptMat2; // 対応点格納用行列
+    std::vector<uchar> mask;  // マスク（ダミー）
+
+    // surf matching
+    feature_matching (m_keypoints1, m_keypoints2, m_matches, m_img1, m_img2);
+
+    m_imgPoints1.resize ( m_keypoints1.size() );
+    m_imgPoints2.resize ( m_keypoints1.size() );
+    for ( size_t  i = 0;  i < m_matches.size(); ++i )
+    {
+        int i1 = m_matches[i].queryIdx;
+        int i2 = m_matches[i].trainIdx;
+        m_imgPoints1[i1] = m_keypoints1[i1].pt;
+        m_imgPoints2[i1] = m_keypoints2[i2].pt;
+    }
+
+    ptMat1 = cv::Mat ( m_imgPoints1 );
+    ptMat2 = cv::Mat ( m_imgPoints2 );
+
+    // fundam.cpp  ... line:1108, line: 1073
+    F = cv::findFundamentalMat(ptMat1, ptMat2, cv::FM_RANSAC); //CV_FM_7POINT, CV_FM_8POINT, cv::FM_RANSAC, CV_FM_LMEDS
+
+    cv::stereoRectifyUncalibrated(ptMat1, ptMat2, F, m_img1.size(),	H1, H2);
+
+    dst1 = cv::Mat ( m_img1.size(), m_img1.type() );
+    dst2 = cv::Mat ( m_img2.size(), m_img2.type() );
+
+    //widh intrinsic: call cv::initUndistortRectifyMap
+    cv::warpPerspective (m_img1, dst1, H1, dst1.size() );
+    cv::warpPerspective (m_img2, dst2, H2, dst2.size() );
+
+    cv::imwrite ( "rectfied_1.png", dst1 );
+    cv::imwrite ( "rectfied_2.png", dst2 );
+    cv::imshow("rectified1", dst1);
+    cv::imshow("rectified2", dst2);
+
+    cv::waitKey();
+}
+
+void rectify_main(){
+    rectify_test();
+}
+*/
 int main()
 {
     unsigned int thread_num = std::thread::hardware_concurrency();
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-    // xmlRead();
+    xmlRead();
     // subMat();
-    // thread_pool_test();
-    //test_img();
-    // test_Mat();
-    // test_LBP();
-    // take_image();
-     change_stereo();
+    //  thread_pool_test();
+    // test_img();
+    //  test_Mat();
+    //  test_LBP();
+    //  take_image();
+    //  change_stereo();
+    // sub_image();
+    // rectify_main();
     return 0;
 }
