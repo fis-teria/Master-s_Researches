@@ -2213,10 +2213,10 @@ void test_LBP() // matにおける画素のアクセス速度の比較
 
 void take_image()
 {
-    std::string fir_dir_left = "images/20231231/left";
-    std::string fir_dir_right = "images/20231231/right";
-    readXml xml00 = readXml("camera/out_camera_data00.xml");
-    readXml xml02 = readXml("camera/out_camera_data02.xml");
+    std::string fir_dir_left = "images/sample/left";
+    std::string fir_dir_right = "images/sample/right";
+    readXml xml00 = readXml("camera/out_camera_data_webcam.xml");
+    readXml xml02 = readXml("camera/out_camera_data_onda.xml");
     /*
     for (int x = 0; x < xml00.camera_matrix.cols; x++)
     {
@@ -2270,8 +2270,8 @@ void take_image()
     int count = 0;
     while (1) // 無限ループ
     {
-        cap >> frame;
-        cap2 >> frame2;
+        cap >> frame;//left
+        cap2 >> frame2;//right
 
         cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
@@ -2279,8 +2279,8 @@ void take_image()
         // cv::resize(distort, distort, cv::Size(WIDTH, HEIGHT));
         // cv::resize(distort2, distort2, cv::Size(WIDTH, HEIGHT));
 
-        // cv::imshow("a", distort);
-        // cv::imshow("b", distort2);
+         cv::imshow("a", distort);
+         cv::imshow("b", distort2);
 
         std::cout << "write images " << count << std::endl;
         cv::imwrite(make_spath(fir_dir_left, count, tag), distort);
@@ -2354,8 +2354,8 @@ void change_stereo()
 
 void sub_image()
 {
-    cv::Mat left = cv::imread(LEFT_IMG, BLOCK_MODE);
-    cv::Mat right = cv::imread(RIGHT_IMG, BLOCK_MODE);
+    cv::Mat left = cv::imread("images/sample/left/000006.jpg", BLOCK_MODE);
+    cv::Mat right = cv::imread("images/sample/right/000006.jpg", BLOCK_MODE);
 
     cv::Mat L2R_img, R2L_img;
 
@@ -2364,6 +2364,7 @@ void sub_image()
 
     cv::absdiff(left, right, L2R_img);
     cv::absdiff(right, left, R2L_img);
+    cv::absdiff(L2R_img, R2L_img, L2R_img);
     cv::imshow("left", left);
     cv::imshow("right", right);
     cv::imshow("r2l", R2L_img);
@@ -2379,141 +2380,34 @@ void sub_image()
     }
 }
 
-/*
-void feature_matching (std::vector<cv::KeyPoint>&  keypoints1, std::vector<cv::KeyPoint>&  keypoints2, std::vector<cv::DMatch> & dmatch, cv::Mat &  img1, cv::Mat & img2)
-{
-    //Grid, Pyramid
-    //FAST，FASTX，STAR，SIFT，SURF，ORB，BRISK，MSER，GFTT，HARRIS，Dense，SimpleBlob
-    const std::string& featureDetectorName = "SURF";
-
-    //Opponent
-    //SIFT，SURF，BRIEF，BRISK，ORB，FREAK
-    const std::string& descriptorExtractorName = "SURF";
-
-    //SIFT, SURF : Euclid
-    //BRIEF, ORB, FREAK: Binary .type() CV_8U: Binary, Hamming Distance
-    //BruteForce，BruteForce-L1，BruteForce-SL2，BruteForce-Hamming，BruteForce-Hamming(2)，FlannBased
-    const std::string& descriptorMatcherName = "FlannBased";
-
-    bool crossCheck = false; // true
-
-    // SIFT・SURFモジュールの初期化
-    cv::initModule_nonfree();
-
-    // 特徴点抽出
-    cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create(featureDetectorName);
-    detector->detect(img1, keypoints1);
-    detector->detect(img2, keypoints2);
-
-    // 特徴記述
-    cv::Ptr<cv::DescriptorExtractor> extractor = cv::DescriptorExtractor::create(descriptorExtractorName);
-    cv::Mat descriptor1, descriptor2;
-    extractor->compute(img1, keypoints1, descriptor1);
-    extractor->compute(img2, keypoints2, descriptor2);
-
-    // マッチング
-    cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(descriptorMatcherName);
-    if (crossCheck)
-    {
-        // クロスチェックする場合
-        std::vector<cv::DMatch> match12, match21;
-        matcher->match(descriptor1, descriptor2, match12);
-        matcher->match(descriptor2, descriptor1, match21);
-        for (size_t i = 0; i < match12.size(); i++)
-        {
-            cv::DMatch forward = match12[i];
-            cv::DMatch backward = match21[forward.trainIdx];
-            if (backward.trainIdx == forward.queryIdx)
-                dmatch.push_back(forward);
-        }
-    }
-    else
-    {
-        // クロスチェックしない場合
-        matcher->match(descriptor1, descriptor2, dmatch);
-    }
-
-#if 1
-    // マッチング結果の表示
-    cv::Mat out;
-    cv::drawMatches(img1, keypoints1, img2, keypoints2, dmatch, out);
-    cv::imshow("matching", out);
-    cv::waitKey(1);
-    //while (cv::waitKey(1) == -1);
-#endif
+void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR){
+    /*
+        block       深度推定したい画像
+        src         対応を探したい画像
+        dst         深度マップを出力する画像
+        block_size  探索フレームのサイズ基本3x3
+        mode        グレースケールorカラー
+        LorR        左から右か右から左
+    */
+   
+   //Inirializarion
 }
 
-void rectify_test()
-{
-    cv::Mat m_img1 = cv::imread (RIGHT_IMG, cv::CV_LOAD_IMAGE_GRAYSCALE );
-    cv::Mat m_img2 = cv::imread (LEFT_IMG, cv::CV_LOAD_IMAGE_GRAYSCALE );
-    if(m_img1.empty() || m_img2.empty()) return;
-
-    std::vector<Point2f>  m_imgPoints1;
-    std::vector<Point2f>  m_imgPoints2;
-    std::vector<DMatch> m_matches;
-    std::vector<KeyPoint>  m_keypoints1, m_keypoints2;
-
-    cv::Mat  dst1, dst2 ; // ステレオ平行化画像出力先
-    cv::Mat  F, H1, H2;   // F行列、ステレオ平行化のための変換行列
-    cv::Mat  ptMat1, ptMat2; // 対応点格納用行列
-    std::vector<uchar> mask;  // マスク（ダミー）
-
-    // surf matching
-    feature_matching (m_keypoints1, m_keypoints2, m_matches, m_img1, m_img2);
-
-    m_imgPoints1.resize ( m_keypoints1.size() );
-    m_imgPoints2.resize ( m_keypoints1.size() );
-    for ( size_t  i = 0;  i < m_matches.size(); ++i )
-    {
-        int i1 = m_matches[i].queryIdx;
-        int i2 = m_matches[i].trainIdx;
-        m_imgPoints1[i1] = m_keypoints1[i1].pt;
-        m_imgPoints2[i1] = m_keypoints2[i2].pt;
-    }
-
-    ptMat1 = cv::Mat ( m_imgPoints1 );
-    ptMat2 = cv::Mat ( m_imgPoints2 );
-
-    // fundam.cpp  ... line:1108, line: 1073
-    F = cv::findFundamentalMat(ptMat1, ptMat2, cv::FM_RANSAC); //CV_FM_7POINT, CV_FM_8POINT, cv::FM_RANSAC, CV_FM_LMEDS
-
-    cv::stereoRectifyUncalibrated(ptMat1, ptMat2, F, m_img1.size(),	H1, H2);
-
-    dst1 = cv::Mat ( m_img1.size(), m_img1.type() );
-    dst2 = cv::Mat ( m_img2.size(), m_img2.type() );
-
-    //widh intrinsic: call cv::initUndistortRectifyMap
-    cv::warpPerspective (m_img1, dst1, H1, dst1.size() );
-    cv::warpPerspective (m_img2, dst2, H2, dst2.size() );
-
-    cv::imwrite ( "rectfied_1.png", dst1 );
-    cv::imwrite ( "rectfied_2.png", dst2 );
-    cv::imshow("rectified1", dst1);
-    cv::imshow("rectified2", dst2);
-
-    cv::waitKey();
-}
-
-void rectify_main(){
-    rectify_test();
-}
-*/
 int main()
 {
     unsigned int thread_num = std::thread::hardware_concurrency();
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-    xmlRead();
+    //xmlRead();
     // subMat();
     //  thread_pool_test();
     // test_img();
     //  test_Mat();
     //  test_LBP();
-    //  take_image();
+    //take_image();
     //  change_stereo();
-    // sub_image();
+    sub_image();
     // rectify_main();
     return 0;
 }
