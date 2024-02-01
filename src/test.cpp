@@ -1723,7 +1723,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
     if (mode == 0)
         OMP_PARALLEL_FOR
 #pragma omp private(depth_H, depth, x, block, src)
-    for (int x = b_size / 2+block.cols/5; x < 4*block.cols/5; x += b_size)
+    for (int x = b_size / 2 + block.cols / 5; x < 4 * block.cols / 5; x += b_size)
     {
         for (int y = b_size / 2; y < block.rows; y += b_size)
         {
@@ -2270,8 +2270,8 @@ void take_image()
     int count = 0;
     while (1) // 無限ループ
     {
-        cap >> frame;//left
-        cap2 >> frame2;//right
+        cap >> frame;   // left
+        cap2 >> frame2; // right
 
         cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
@@ -2279,8 +2279,8 @@ void take_image()
         // cv::resize(distort, distort, cv::Size(WIDTH, HEIGHT));
         // cv::resize(distort2, distort2, cv::Size(WIDTH, HEIGHT));
 
-         cv::imshow("a", distort);
-         cv::imshow("b", distort2);
+        cv::imshow("a", distort);
+        cv::imshow("b", distort2);
 
         std::cout << "write images " << count << std::endl;
         cv::imwrite(make_spath(fir_dir_left, count, tag), distort);
@@ -2380,7 +2380,15 @@ void sub_image()
     }
 }
 
-void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR){
+struct CORRES
+{
+    int x;
+    int y;
+    int SAD;
+};
+
+void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
+{
     /*
         block       深度推定したい画像
         src         対応を探したい画像
@@ -2389,8 +2397,33 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
         mode        グレースケールorカラー
         LorR        左から右か右から左
     */
-   
-   //Inirializarion
+
+    cv::Mat frame = block.clone();
+    cv::Mat frame2 = src.clone();
+    if (block.cols % 3 != 0)
+    {
+        cv::Mat padblock, padsrc;
+        // 1280x720 -> 1281x720 1281 can devide by 3.
+        copyMakeBorder(block, padblock, 0, 0, 0, block.cols%3, cv::BORDER_REPLICATE);
+        copyMakeBorder(src, padsrc, 0, 0, 0, block.cols % 3, cv::BORDER_REPLICATE);
+        std::vector<std::vector<CORRES>> conv_map(padblock.cols / 3(std::vector<CORRES>(padblock.rows / 3)));
+        frame = padblock.clone();
+        frame2 = padsrc.clone();
+    }else{
+        std::vector<std::vector<CORRES>> conv_map(block.cols / 3(std::vector<CORRES>(block.rows / 3)));
+    }
+    // Inirializarion
+    for (int x = block_size/2 x < block.cols; x+= block_size)
+    {
+
+        for (int y = block_size/2; y < block.rows; y+=block_size)
+        {
+            
+        }
+        
+    }
+    
+
 }
 
 int main()
@@ -2399,15 +2432,14 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     // detective();
-    //xmlRead();
+    // xmlRead();
     // subMat();
     //  thread_pool_test();
     // test_img();
     //  test_Mat();
     //  test_LBP();
-    //take_image();
+    // take_image();
     //  change_stereo();
     sub_image();
-    // rectify_main();
     return 0;
 }
