@@ -84,6 +84,8 @@ double D_CALI = (FOCUS * (CAM_DIS * 10)) / (PXL_WIDTH * 1000); // 距離を求�
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
+const int WIN_SIZE = 3;
+
 const int L2R = -1;
 const int R2L = 1;
 
@@ -1903,9 +1905,9 @@ void xmlRead()
         while (b_time < 2)*/
         ;
 #pragma omp section
-        block_Matching(distort, distort2, R2L_img, 3, BLOCK_MODE, R2L);
+        block_Matching(distort, distort2, R2L_img, WIN_SIZE, BLOCK_MODE, R2L);
 #pragma omp section
-        block_Matching(distort2, distort, L2R_img, 3, BLOCK_MODE, L2R);
+        block_Matching(distort2, distort, L2R_img, WIN_SIZE, BLOCK_MODE, L2R);
         // std::cout << "end block_matching" << std::endl;
         // clock_t end = clock();
         //  print_elapsed_time(begin, end);
@@ -2398,32 +2400,156 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
         LorR        左から右か右から左
     */
 
+    dst = cv::Mat(block.cols, block.rows, CV_8UC3);
+    std::cout << "start opticalflow_PM" << std::endl;
     cv::Mat frame = block.clone();
     cv::Mat frame2 = src.clone();
     if (block.cols % 3 != 0)
     {
         cv::Mat padblock, padsrc;
+        int r = 0;
+        if(block.cols %3 ==2){
+            r=1;
+        }else{
+            r = 2;
+        }
         // 1280x720 -> 1281x720 1281 can devide by 3.
-        copyMakeBorder(block, padblock, 0, 0, 0, block.cols%3, cv::BORDER_REPLICATE);
-        copyMakeBorder(src, padsrc, 0, 0, 0, block.cols % 3, cv::BORDER_REPLICATE);
-        std::vector<std::vector<CORRES>> conv_map(padblock.cols / 3(std::vector<CORRES>(padblock.rows / 3)));
+        copyMakeBorder(block, padblock, 0, 0, 0, r, cv::BORDER_REPLICATE);
+        copyMakeBorder(src, padsrc, 0, 0, 0, r, cv::BORDER_REPLICATE);
         frame = padblock.clone();
         frame2 = padsrc.clone();
-    }else{
-        std::vector<std::vector<CORRES>> conv_map(block.cols / 3(std::vector<CORRES>(block.rows / 3)));
     }
+    std::vector<std::vector<CORRES>> conv_map(frame.cols / 3, (std::vector<CORRES>(frame.rows / 3, {0, 0, 0})));
+
+    int conv_map_cols = 0;
+    int conv_map_rows = 0;
+
+    int match_x = 0;
+    int match_y = 0;
+
     // Inirializarion
-    for (int x = block_size/2 x < block.cols; x+= block_size)
+    cv::RNG rng(1); // 乱数
+    int rand_uni = 0;
+    for (int x = block_size / 2; x < block.cols; x += block_size)
     {
-
-        for (int y = block_size/2; y < block.rows; y+=block_size)
+        conv_map_rows = 0;
+        for (int y = block_size / 2; y < block.rows; y += block_size)
         {
-            
+            rand_uni = rng.uniform(int(0), int(block.cols - 1));
+            if (y == 1)
+            {
+                if (x + block.cols / 3 < block.cols)
+                {
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            match_x = x + rand_uni % 3;
+                            match_y = y + (int)(rand_uni / 3 + 1);
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y, match_x));
+                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            match_x = 2 * block.cols / 3 + rand_uni % 3;
+                            match_y = y + (int)(rand_uni / 3) + 1;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y, match_x));
+                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        }
+                    }
+                }
+            }
+            else if (y == block.rows - 2)
+            {
+                if (x + block.cols / 3 < block.cols)
+                {
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            match_x = x + rand_uni % 3;
+                            match_y = y + (int)(rand_uni / 3) - 1;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y, match_x));
+                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            match_x = 2 * block.cols / 3 + rand_uni % 3;
+                            match_y = y + (int)(rand_uni / 3) - 1;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y, match_x));
+                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (x + block.cols / 3 < block.cols)
+                {
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            match_x = x + rand_uni % 3;
+                            match_y = y + (int)(rand_uni / 3);
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y, match_x));
+                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            match_x = 2 * block.cols / 3 + rand_uni % 3;
+                            match_y = y + (int)(rand_uni / 3);
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y, match_x));
+                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        }
+                    }
+                }
+            }
+            conv_map_rows++;
         }
-        
+        conv_map_cols++;
     }
-    
 
+    for (int i = 0; i < block.cols / 3; i++)
+    {
+        for (int j = 0; j < block.rows / 3; j++)
+        {
+            std::cout << "(" << 3*(i + 1) - 2 << ", " << 3*(j+1) -2 << ") " << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << "\n";
+        }
+    }
+}
+
+void test_PM()
+{
+    cv::Mat left = cv::imread(LEFT_IMG, 0);
+    cv::Mat right = cv::imread(RIGHT_IMG, 0);
+    cv::Mat dst;
+
+    opticalflow_PM(left, right, dst, WIN_SIZE, BLOCK_MODE, L2R);
 }
 
 int main()
@@ -2440,6 +2566,7 @@ int main()
     //  test_LBP();
     // take_image();
     //  change_stereo();
-    sub_image();
+    // sub_image();
+    test_PM();
     return 0;
 }
