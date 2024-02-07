@@ -2434,41 +2434,43 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
     // Inirializarion
     cv::RNG rng(1); // 乱数
     int rand_uni = 0;
+
+    int divide_num = 10;
     for (int x = block_size / 2; x < block.cols; x += block_size)
     {
         conv_map_rows = 0;
         for (int y = block_size / 2; y < block.rows; y += block_size)
         {
             rand_uni = rng.uniform(int(0), int(block.cols - 1));
-            //std::cout << rand_uni << "\n";
+            // std::cout << rand_uni << "\n";
             if (y == 1)
             {
                 conv_map[conv_map_cols][conv_map_rows].SAD = 0;
                 if (x + block.cols / 3 < block.cols)
                 {
+                    match_x = x + rand_uni % 3;
+                    match_y = y + 3 * (int)(rand_uni / divide_num + 1);
+                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
                     for (int bx = -1; bx <= 1; bx++)
                     {
                         for (int by = -1; by <= 1; by++)
                         {
-                            match_x = x + rand_uni % 3;
-                            match_y = y + (int)(rand_uni / (block.cols/3) + 1);
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y, match_x));
-                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
                         }
                     }
                 }
                 else
                 {
+                    match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
+                    match_y = y + (int)(rand_uni / divide_num) + 1;
+                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
                     for (int bx = -1; bx <= 1; bx++)
                     {
                         for (int by = -1; by <= 1; by++)
                         {
-                            match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
-                            match_y = y + (int)(rand_uni / (block.cols/3)) + 1;
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y, match_x));
-                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
                         }
                     }
                 }
@@ -2477,29 +2479,29 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
             {
                 if (x + block.cols / 3 < block.cols)
                 {
+                    match_x = x + rand_uni % 3;
+                    match_y = y + (int)(rand_uni / divide_num) - 1;
+                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
                     for (int bx = -1; bx <= 1; bx++)
                     {
                         for (int by = -1; by <= 1; by++)
                         {
-                            match_x = x + rand_uni % 3;
-                            match_y = y + (int)(rand_uni / (block.cols/3)) - 1;
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y, match_x));
-                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
                         }
                     }
                 }
                 else
                 {
+                    match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
+                    match_y = y + (int)(rand_uni / divide_num) - 1;
+                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
                     for (int bx = -1; bx <= 1; bx++)
                     {
                         for (int by = -1; by <= 1; by++)
                         {
-                            match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
-                            match_y = y + (int)(rand_uni / (block.cols/3)) - 1;
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y, match_x));
-                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
                         }
                     }
                 }
@@ -2508,34 +2510,58 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
             {
                 if (x + block.cols / 3 < block.cols)
                 {
+                    match_x = x + rand_uni % 3;
+                    if (y - (int)(block.cols / divide_num) / 2 < 0)
+                    {
+                        match_y = 1 + 3 * (int)(rand_uni / divide_num);
+                    }
+                    else if (y + (int)(block.cols / divide_num) / 2 > block.rows)
+                    {
+                        match_y = (block.rows - 2) - 3 * (int)(rand_uni / divide_num);
+                    }
+                    else
+                    {
+                        match_y = y - (int)(block.cols / divide_num) / 2 + 3 * (rand_uni / divide_num);
+                    }
+
+                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
                     for (int bx = -1; bx <= 1; bx++)
                     {
                         for (int by = -1; by <= 1; by++)
                         {
-                            match_x = x + rand_uni % 3;
-                            match_y = y + (int)(rand_uni / (block.cols/3));
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y, match_x));
-                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
                         }
                     }
                 }
                 else
                 {
+                    match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
+                    if (y - (int)(block.cols / divide_num) / 2 < 0)
+                    {
+                        match_y = 1 + 3 * (int)(rand_uni / divide_num);
+                    }
+                    else if (y + (int)(block.cols / divide_num) / 2 > block.rows)
+                    {
+                        match_y = (block.rows - 2) - 3 * (int)(rand_uni / divide_num);
+                    }
+                    else
+                    {
+                        match_y = y - (int)(block.cols / divide_num) / 2 + 3 * (rand_uni / divide_num);
+                    }
+
+                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
                     for (int bx = -1; bx <= 1; bx++)
                     {
                         for (int by = -1; by <= 1; by++)
                         {
-                            match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
-                            match_y = y + (int)(rand_uni / (block.cols/3));
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y, match_x));
-                            conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                            conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
                         }
                     }
                 }
             }
-            //std::cout << conv_map[conv_map_cols][conv_map_rows].x << " " << conv_map[conv_map_cols][conv_map_rows].y << " " << conv_map[conv_map_cols][conv_map_rows].SAD << "\n";
+            // std::cout << conv_map[conv_map_cols][conv_map_rows].x << " " << conv_map[conv_map_cols][conv_map_rows].y << " " << conv_map[conv_map_cols][conv_map_rows].SAD << "\n";
             conv_map_rows++;
         }
         conv_map_cols++;
@@ -2544,7 +2570,7 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
     std::cout << conv_map_cols << " " << conv_map_rows << std::endl;
 
     // Propagation
-    /*
+    ///*
     std::cout << "start Propagation" << std::endl;
     for (int i = 0; i < conv_map_cols; i++)
     {
@@ -2552,14 +2578,14 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
         {
             for (int bx = 0; bx <= 1; bx++)
             {
-                for (int by = 0; by <= 1; by++)
+                for (int by = -1; by <= 1; by++)
                 {
                     if (i + bx > 0 && i + bx < conv_map_cols && j + by > 0 && j + by < conv_map_rows)
                     {
                         if (i != i + bx && j != j + by)
                         {
-                            std::cout << i + bx << " " << j + by << "\n";
-                            std::cout << conv_map[i + bx][j].SAD << "\n";
+                            //std::cout << i + bx << " " << j + by << "\n";
+                            //std::cout << conv_map[i + bx][j].SAD << "\n";
                             if (conv_map[i + bx][j + by].SAD < conv_map[i][j].SAD)
                             {
                                 conv_map[i][j].x = conv_map[i + bx][j + by].x;
@@ -2574,15 +2600,24 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
     }
     //*/
 
+    //search
+    
+
     int depth_H = 0;
     for (int i = 0; i < block.cols / 3; i++)
     {
         for (int j = 0; j < block.rows / 3; j++)
         {
             depth_H = sqrt((3 * (i + 1) - 2 - conv_map[i][j].x) * (3 * (i + 1) - 2 - conv_map[i][j].x) + (3 * (j + 1) - 2 - conv_map[i][j].y) * (3 * (j + 1) - 2 - conv_map[i][j].y));
-            cv::rectangle(dst, cv::Point(3 * (i + 1) - 2 - block_size / 2, 3 * (j + 1) - 2 - block_size / 2), cv::Point(3 * (i + 1) - 2 + block_size / 2, 3 * (j + 1) - 2 + block_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
-
-            //std::cout << "(" << 3 * (i + 1) - 2 << ", " << 3 * (j + 1) - 2 << ") " << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << " " << depth_H << "\n";
+            // cv::rectangle(dst, cv::Point(3 * (i + 1) - 2 - block_size / 2, 3 * (j + 1) - 2 - block_size / 2), cv::Point(3 * (i + 1) - 2 + block_size / 2, 3 * (j + 1) - 2 + block_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+            for (int bx = -1; bx <= 1; bx++)
+            {
+                for (int by = -1; by <= 1; by++)
+                {
+                    dst.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(depth_H, 255, 255);
+                }
+            }
+            // std::cout << "(" << 3 * (i + 1) - 2 << ", " << 3 * (j + 1) - 2 << ") " << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << " " << depth_H << "\n";
         }
     }
     cv::cvtColor(dst, dst, cv::COLOR_HSV2BGR);
