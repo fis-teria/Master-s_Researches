@@ -92,16 +92,16 @@ const int L2R = -1;
 const int R2L = 1;
 
 const int debug = 1;
-const int sim_BM_check = 5;
+const int sim_BM_check = 3;
 const int vec_check = 2;
 const int thread_check = 1;
 
-const int SEARCH_RANGE = 64;
+const int SEARCH_RANGE = 128;
 
 const int BLOCK_MODE = NTSS_GRAY;
 
-const std::string LEFT_IMG = "images/20231231/left/003456.jpg";
-const std::string RIGHT_IMG = "images/20231231/right/003456.jpg";
+const std::string LEFT_IMG = "images/20231231/left/004567.jpg";
+const std::string RIGHT_IMG = "images/20231231/right/004567.jpg";
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -705,7 +705,7 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sum < beta.sum; });
     //*/
-    dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
+    dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) + (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     if (debug == sim_BM_check)
         std::cout << " distance = " << dist;
 
@@ -827,7 +827,7 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sum < beta.sum; });
     //*/
-    dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) - (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
+    dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) + (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
     // std::cout << " distance = " << dist << std::endl;
 
     depth = D_CALI / dist;
@@ -1729,7 +1729,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
     if (mode == 0)
         OMP_PARALLEL_FOR
 #pragma omp private(depth_H, depth, x, block, src)
-    for (int x = b_size / 2 + block.cols / 5; x < 4 * block.cols / 5; x += b_size)
+    for (int x = b_size / 2; x < block.cols; x += b_size)
     {
         for (int y = b_size / 2; y < block.rows; y += b_size)
         {
@@ -2406,7 +2406,8 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
     int search_range = range;
     search_range++;
     // conv_map_cols = 0;
-
+    std::string location_path = "logs/patch_match/initilize.txt";
+    std::ofstream outputfile(location_path);
     for (int x = block_size / 2; x < block.cols; x += block_size)
     {
         // conv_map_rows = 0;
@@ -2416,15 +2417,15 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
             // std::cout << "a" << std::endl;
             rand_uni = random_mask[i][j];
             // std::cout << "b" << std::endl;
-            // std::cout << "(" << x << " " << y << ") " << rand_uni << "      ";
-            // std::cout << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << "     ->      ";
+            outputfile << "(" << x << " " << y << ") " << rand_uni << "      ";
+            outputfile << "     ->      ";
 
             if (x - 3 * search_range / 2 < 0)
             {
-                // std::cout << " x1 ";
+                outputfile << " x1 ";
                 if (y - 3 * search_range / 2 < 0) // yが負の時
                 {
-                    // std::cout << " y1 ";
+                    outputfile << " y1 ";
                     match_x = 1 + 3 * rand_uni / search_range;
                     match_y = 1 + 3 * rand_uni % search_range;
                     conv_map[i][j].SAD = 0;
@@ -2440,7 +2441,7 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
                 }
                 else if (y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
                 {
-                    // std::cout << " y2 ";
+                    outputfile << " y2 ";
                     match_x = 1 + 3 * rand_uni / search_range;
                     match_y = (block.rows - 2 - (3 * search_range)) + 3 * rand_uni % search_range;
                     conv_map[i][j].SAD = 0;
@@ -2456,9 +2457,16 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
                 }
                 else
                 {
-                    // std::cout << " y3 ";
+                    outputfile << " y3 ";
                     match_x = 1 + 3 * rand_uni / search_range;
-                    match_y = conv_map[i][j].y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    if (y - (3 * search_range / 2) > 0)
+                    {
+                        match_y = y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    }
+                    else
+                    {
+                        match_y = 1 + 3 * rand_uni % search_range;
+                    }
                     conv_map[i][j].SAD = 0;
                     for (int bx = -1; bx <= 1; bx++)
                     {
@@ -2473,10 +2481,10 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
             }
             else if (x + 3 * search_range / 2 > block.cols)
             {
-                // std::cout << " x2 ";
+                outputfile << " x2 ";
                 if (y - 3 * search_range / 2 < 0) // yが負の時
                 {
-                    // std::cout << " y4 ";
+                    outputfile << " y4 ";
                     match_x = (block.cols - 2 - (3 * search_range / 2)) + 3 * rand_uni / search_range;
                     match_y = 1 + 3 * rand_uni % search_range;
                     conv_map[i][j].SAD = 0;
@@ -2492,7 +2500,7 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
                 }
                 else if (y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
                 {
-                    // std::cout << " y5 ";
+                    outputfile << " y5 ";
                     match_x = (block.cols - 2 - (3 * search_range / 2)) + 3 * rand_uni / search_range;
                     match_y = (block.rows - 2 - (3 * search_range / 2)) + 3 * rand_uni % search_range;
                     conv_map[i][j].SAD = 0;
@@ -2508,9 +2516,16 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
                 }
                 else
                 {
-                    // std::cout << " y6 ";
+                    outputfile << " y6 ";
                     match_x = (block.cols - 2 - (3 * search_range / 2)) + 3 * rand_uni / search_range;
-                    match_y = conv_map[i][j].y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    if (y - (3 * search_range / 2) > 0)
+                    {
+                        match_y = y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    }
+                    else
+                    {
+                        match_y = 1 + 3 * rand_uni % search_range;
+                    }
                     conv_map[i][j].SAD = 0;
                     for (int bx = -1; bx <= 1; bx++)
                     {
@@ -2525,11 +2540,18 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
             }
             else
             {
-                // std::cout << " x3 ";
+                outputfile << " x3 ";
                 if (y - 3 * search_range / 2 < 0) // yが負の時
                 {
-                    // std::cout << " y7 ";
-                    match_x = conv_map[i][j].x - (3 * search_range / 2) + 3 * rand_uni / search_range;
+                    outputfile << " y7 ";
+                    if (x - (3 * search_range / 2) > 0)
+                    {
+                        match_x = x - (3 * search_range / 2) + 3 * rand_uni / search_range;
+                    }
+                    else
+                    {
+                        match_x = 1 + 3 * rand_uni / search_range;
+                    }
                     match_y = 1 + 3 * rand_uni % search_range;
                     conv_map[i][j].SAD = 0;
                     for (int bx = -1; bx <= 1; bx++)
@@ -2544,8 +2566,15 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
                 }
                 else if (y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
                 {
-                    // std::cout << " y8 ";
-                    match_x = conv_map[i][j].x - (3 * search_range / 2) + 3 * rand_uni / search_range;
+                    outputfile << " y8 ";
+                    if (x - (3 * search_range / 2) > 0)
+                    {
+                        match_x = x - (3 * search_range / 2) + 3 * rand_uni / search_range;
+                    }
+                    else
+                    {
+                        match_x = 1 + 3 * rand_uni / search_range;
+                    }
                     match_y = (block.rows - 2 - (3 * search_range / 2)) + 3 * rand_uni % search_range;
                     conv_map[i][j].SAD = 0;
                     for (int bx = -1; bx <= 1; bx++)
@@ -2560,9 +2589,23 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
                 }
                 else
                 {
-                    // std::cout << " y9 ";
-                    match_x = conv_map[i][j].x - (3 * search_range / 2) + 3 * rand_uni / search_range;
-                    match_y = conv_map[i][j].y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    outputfile << " y9 ";
+                    if (x - (3 * search_range / 2) > 0)
+                    {
+                        match_x = x - (3 * search_range / 2) + 3 * rand_uni / search_range;
+                    }
+                    else
+                    {
+                        match_x = 1 + 3 * rand_uni / search_range;
+                    }
+                    if (y - (3 * search_range / 2) > 0)
+                    {
+                        match_y = y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    }
+                    else
+                    {
+                        match_y = 1 + 3 * rand_uni % search_range;
+                    }
                     conv_map[i][j].SAD = 0;
                     for (int bx = -1; bx <= 1; bx++)
                     {
@@ -2575,8 +2618,9 @@ void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vecto
                     conv_map[i][j].y = match_y;
                 }
             }
-            // std::cout << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD;
-            // std::cout << std::endl;
+            outputfile << "    ->     ";
+            outputfile << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD;
+            outputfile << std::endl;
 
             // conv_map_rows++;
             j++;
@@ -2803,7 +2847,7 @@ void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     std::cout << "start opticalflow_PM" << std::endl;
     cv::Mat frame = block.clone();
     cv::Mat frame2 = src.clone();
-    if (block.cols % 3 != 0 || block.rows %3 != 0)
+    if (block.cols % 3 != 0 || block.rows % 3 != 0)
     {
         cv::Mat padblock, padsrc;
         int r = 0;
@@ -2812,7 +2856,7 @@ void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
         {
             r = 1;
         }
-        else if(block.cols %3 == 1)
+        else if (block.cols % 3 == 1)
         {
             r = 2;
         }
@@ -2821,7 +2865,7 @@ void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
         {
             l = 1;
         }
-        else if(block.rows % 3 == 1)
+        else if (block.rows % 3 == 1)
         {
             l = 2;
         }
@@ -2991,67 +3035,123 @@ void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
 
     // Propagation
     ///*
-    for (int r = SEARCH_RANGE; r > 0; r -= 10)
+    for (int r = 1; r < 8; r++)
     {
         std::cout << "start Propagation" << std::endl;
         for (int i = 0; i < conv_map_cols; i++)
         {
             for (int j = 0; j < conv_map_rows; j++)
             {
-                for (int bx = 0; bx <= 1; bx++)
+                if (r % 2 == 1)
                 {
-                    for (int by = -1; by <= 1; by++)
+                    if (i - 1 > 0)
                     {
-                        if (i + bx > 0 && i + bx < conv_map_cols && j + by > 0 && j + by < conv_map_rows)
+                        if (conv_map[i - 1][j].SAD < conv_map[i][j].SAD)
                         {
-                            if (bx == 0 && by == -1)
+                            if (conv_map[i - 1][j].x + 3 < block.cols)
                             {
-                                continue;
-                                // std::cout << i + bx << " " << j + by << "\n";
-                                // std::cout << conv_map[i + bx][j].SAD << "\n";
-                            }
-                            else if (bx == 0 && by == 0)
-                            {
-                                continue;
+                                conv_map[i][j].x = conv_map[i - 1][j].x + 3;
                             }
                             else
                             {
-                                if (conv_map[i + bx][j + by].SAD < conv_map[i][j].SAD)
-                                {
-                                    conv_map[i][j].x = conv_map[i + bx][j + by].x - bx * 3;
-                                    conv_map[i][j].y = conv_map[i + bx][j + by].y - by * 3;
-                                    conv_map[i][j].SAD = conv_map[i + bx][j + by].SAD;
-                                }
+                                conv_map[i][j].x = conv_map[i - 1][j].x;
                             }
+                            conv_map[i][j].y = conv_map[i - 1][j].y;
+                            conv_map[i][j].SAD = conv_map[i - 1][j].SAD;
+                        }
+                    }
+                    if (j - 1 > 0)
+                    {
+                        if (conv_map[i][j - 1].SAD < conv_map[i][j].SAD)
+                        {
+                            conv_map[i][j].x = conv_map[i][j - 1].x;
+                            if (conv_map[i][j - 1].y + 3 < block.rows)
+                            {
+                                conv_map[i][j].y = conv_map[i][j - 1].y + 3;
+                            }
+                            else
+                            {
+                                conv_map[i][j].y = conv_map[i][j - 1].y;
+                            }
+                            conv_map[i][j].SAD = conv_map[i][j - 1].SAD;
+                        }
+                    }
+                }
+                else
+                {
+                    if (i + 1 < conv_map_cols)
+                    {
+                        if (conv_map[i + 1][j].SAD < conv_map[i][j].SAD)
+                        {
+                            if (conv_map[i + 1][j].x - 3 > 0)
+                            {
+                                conv_map[i][j].x = conv_map[i + 1][j].x - 3;
+                            }
+                            else
+                            {
+                                conv_map[i][j].x = conv_map[i + 1][j].x;
+                            }
+                            conv_map[i][j].y = conv_map[i + 1][j].y;
+                            conv_map[i][j].SAD = conv_map[i + 1][j].SAD;
+                        }
+                    }
+                    if (j + 1 < conv_map_rows)
+                    {
+                        if (conv_map[i][j + 1].SAD < conv_map[i][j].SAD)
+                        {
+                            conv_map[i][j].x = conv_map[i][j + 1].x;
+                            if (conv_map[i][j + 1].y - 3 > 0)
+                            {
+                                conv_map[i][j].y = conv_map[i][j + 1].y - 3;
+                            }
+                            else
+                            {
+                                conv_map[i][j].y = conv_map[i][j + 1].y;
+                            }
+                            conv_map[i][j].SAD = conv_map[i][j + 1].SAD;
                         }
                     }
                 }
             }
         }
 
-        range = r;
+        range = SEARCH_RANGE - 10 * r;
         make_Random_Map(random_map, range * range, conv_map_cols, conv_map_rows);
         opticalflow_Random_Search(block, src, conv_map, conv_map_cols, conv_map_rows, random_map, range);
     }
-        //*/
+    //*/
     int depth_H = 0;
+    int dist = 0;
+    int depth = 0;
+    cv::Mat depth_img = cv::Mat(block.rows, block.cols, CV_8UC3);
     for (int i = 0; i < block.cols / 3; i++)
     {
         for (int j = 0; j < block.rows / 3; j++)
         {
-            depth_H = sqrt((3 * (i + 1) - 2 - conv_map[i][j].x) * (3 * (i + 1) - 2 - conv_map[i][j].x) + (3 * (j + 1) - 2 - conv_map[i][j].y) * (3 * (j + 1) - 2 - conv_map[i][j].y));
-            // cv::rectangle(dst, cv::Point(3 * (i + 1) - 2 - block_size / 2, 3 * (j + 1) - 2 - block_size / 2), cv::Point(3 * (i + 1) - 2 + block_size / 2, 3 * (j + 1) - 2 + block_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+            dist = sqrt((3 * (i + 1) - 2 - conv_map[i][j].x) * (3 * (i + 1) - 2 - conv_map[i][j].x) + (3 * (j + 1) - 2 - conv_map[i][j].y) * (3 * (j + 1) - 2 - conv_map[i][j].y));
+            //std::cout << 3 * (i + 1) - 2 << " " << conv_map[i][j].x << " " << 3 * (j + 1) - 2 << " " << conv_map[i][j].y << " " << dist << "    ->    ";
+            depth = D_CALI / dist;
+            //std::cout << depth << "    ->    ";
+            depth_H = depth * D_MAG;
+            if (depth_H > 150)
+                depth_H = 150;
+            if (depth_H < 0)
+                depth_H = 0;
+            //std::cout << depth_H << "\n";
+            // cv::rectangle(dst, cv::Point(3 * (i), 3 * (j)), cv::Point(3 * (i + 1) - 1, 3 * (j + 1) - 1), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+            ///*
             for (int bx = -1; bx <= 1; bx++)
             {
                 for (int by = -1; by <= 1; by++)
                 {
-                    dst.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(depth_H, 255, 255);
+                    depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(dist, 255, 255);
                 }
             }
+            //*/
             // std::cout << "(" << 3 * (i + 1) - 2 << ", " << 3 * (j + 1) - 2 << ") " << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << " " << depth_H << "\n";
         }
     }
-    cv::cvtColor(dst, dst, cv::COLOR_HSV2BGR);
+    cv::cvtColor(depth_img, dst, cv::COLOR_HSV2BGR);
 }
 
 void test_PM()
@@ -3066,7 +3166,6 @@ void test_PM()
     {
         return;
     }
-
 
     cv::Mat dst;
 
