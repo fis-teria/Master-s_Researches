@@ -17,6 +17,8 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <random>
+#include <filesystem>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <boost/foreach.hpp>
@@ -94,10 +96,12 @@ const int sim_BM_check = 5;
 const int vec_check = 2;
 const int thread_check = 1;
 
+const int SEARCH_RANGE = 64;
+
 const int BLOCK_MODE = NTSS_GRAY;
 
-const std::string LEFT_IMG = "images/20231231/left/002345.jpg";
-const std::string RIGHT_IMG = "images/20231231/right/002345.jpg";
+const std::string LEFT_IMG = "images/20231231/left/003456.jpg";
+const std::string RIGHT_IMG = "images/20231231/right/003456.jpg";
 constexpr size_t ThreadCount = 8;
 template <size_t Count>
 class worker_pool
@@ -608,20 +612,20 @@ double sim_G_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     int y = origin_y;
 
     int start_x = 0;
-    int search_lange = 0;
+    int search_range = 0;
     int end_lange = 0;
 
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = WIDTH / 2;
+        search_range = WIDTH / 2;
     }
     else if (LorR == L2R)
     {
         start_x = origin_x - WIDTH / 2;
-        search_lange = 100;
+        search_range = 100;
     }
-    end_lange = origin_x + search_lange;
+    end_lange = origin_x + search_range;
 
     if (start_x < 0)
         start_x = 0;
@@ -726,20 +730,20 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
     int y = origin_y;
 
     int start_x = 0;
-    int search_lange = 0;
+    int search_range = 0;
     int end_lange = 0;
 
     if (LorR == R2L)
     {
         start_x = origin_x - 100;
-        search_lange = WIDTH / 2;
+        search_range = WIDTH / 2;
     }
     else if (LorR == L2R)
     {
         start_x = origin_x - WIDTH / 2;
-        search_lange = 100;
+        search_range = 100;
     }
-    end_lange = origin_x + search_lange;
+    end_lange = origin_x + search_range;
 
     if (start_x < 0)
         start_x = 0;
@@ -1904,9 +1908,9 @@ void xmlRead()
 
         while (b_time < 2)*/
         ;
-#pragma omp section
+        // #pragma omp sections
         block_Matching(distort, distort2, R2L_img, WIN_SIZE, BLOCK_MODE, R2L);
-#pragma omp section
+        // #pragma omp sections
         block_Matching(distort2, distort, L2R_img, WIN_SIZE, BLOCK_MODE, L2R);
         // std::cout << "end block_matching" << std::endl;
         // clock_t end = clock();
@@ -2093,9 +2097,9 @@ void test_img()
     while (b_time < 2)
         ;
     */
-#pragma omp section
+    // #pragma omp section
     block_Matching(right, left, R2L_img, sim_BM_check, BLOCK_MODE, R2L);
-#pragma omp section
+    // #pragma omp section
     block_Matching(left, right, L2R_img, sim_BM_check, BLOCK_MODE, L2R);
 
     clock_t end = clock();
@@ -2335,9 +2339,9 @@ void change_stereo()
         left = cv::imread(make_spath(fir_dir_left, i, tag), 0);
         right = cv::imread(make_spath(fir_dir_right, i, tag), 0);
 
-#pragma omp section
+        // #pragma omp section
         block_Matching(right, left, R2L_img, 3, BLOCK_MODE, R2L);
-#pragma omp section
+        // #pragma omp section
         block_Matching(left, right, L2R_img, 3, BLOCK_MODE, L2R);
 
         cv::imwrite(make_spath(fir_dir_left_depth, i, tag), L2R_img);
@@ -2389,7 +2393,402 @@ struct CORRES
     int SAD;
 };
 
-void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
+void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vector<CORRES>> &conv_map, int block_size, int range, std::vector<std::vector<int>> &random_mask)
+{
+    int match_x = 0;
+    int match_y = 0;
+    int rand_uni = 0;
+
+    int i = 0;
+    int j = 0;
+
+    std::cout << "start Initialization" << std::endl;
+    int search_range = range;
+    search_range++;
+    // conv_map_cols = 0;
+
+    for (int x = block_size / 2; x < block.cols; x += block_size)
+    {
+        // conv_map_rows = 0;
+        j = 0;
+        for (int y = block_size / 2; y < block.rows; y += block_size)
+        {
+            // std::cout << "a" << std::endl;
+            rand_uni = random_mask[i][j];
+            // std::cout << "b" << std::endl;
+            // std::cout << "(" << x << " " << y << ") " << rand_uni << "      ";
+            // std::cout << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << "     ->      ";
+
+            if (x - 3 * search_range / 2 < 0)
+            {
+                // std::cout << " x1 ";
+                if (y - 3 * search_range / 2 < 0) // yが負の時
+                {
+                    // std::cout << " y1 ";
+                    match_x = 1 + 3 * rand_uni / search_range;
+                    match_y = 1 + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+                else if (y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
+                {
+                    // std::cout << " y2 ";
+                    match_x = 1 + 3 * rand_uni / search_range;
+                    match_y = (block.rows - 2 - (3 * search_range)) + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+                else
+                {
+                    // std::cout << " y3 ";
+                    match_x = 1 + 3 * rand_uni / search_range;
+                    match_y = conv_map[i][j].y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+            }
+            else if (x + 3 * search_range / 2 > block.cols)
+            {
+                // std::cout << " x2 ";
+                if (y - 3 * search_range / 2 < 0) // yが負の時
+                {
+                    // std::cout << " y4 ";
+                    match_x = (block.cols - 2 - (3 * search_range / 2)) + 3 * rand_uni / search_range;
+                    match_y = 1 + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+                else if (y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
+                {
+                    // std::cout << " y5 ";
+                    match_x = (block.cols - 2 - (3 * search_range / 2)) + 3 * rand_uni / search_range;
+                    match_y = (block.rows - 2 - (3 * search_range / 2)) + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+                else
+                {
+                    // std::cout << " y6 ";
+                    match_x = (block.cols - 2 - (3 * search_range / 2)) + 3 * rand_uni / search_range;
+                    match_y = conv_map[i][j].y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+            }
+            else
+            {
+                // std::cout << " x3 ";
+                if (y - 3 * search_range / 2 < 0) // yが負の時
+                {
+                    // std::cout << " y7 ";
+                    match_x = conv_map[i][j].x - (3 * search_range / 2) + 3 * rand_uni / search_range;
+                    match_y = 1 + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+                else if (y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
+                {
+                    // std::cout << " y8 ";
+                    match_x = conv_map[i][j].x - (3 * search_range / 2) + 3 * rand_uni / search_range;
+                    match_y = (block.rows - 2 - (3 * search_range / 2)) + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+                else
+                {
+                    // std::cout << " y9 ";
+                    match_x = conv_map[i][j].x - (3 * search_range / 2) + 3 * rand_uni / search_range;
+                    match_y = conv_map[i][j].y - (3 * search_range / 2) + 3 * rand_uni % search_range;
+                    conv_map[i][j].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[i][j].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[i][j].x = match_x;
+                    conv_map[i][j].y = match_y;
+                }
+            }
+            // std::cout << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD;
+            // std::cout << std::endl;
+
+            // conv_map_rows++;
+            j++;
+        }
+        i++;
+        // conv_map_cols++;
+    }
+}
+
+void opticalflow_Random_Search(cv::Mat &block, cv::Mat &src, std::vector<std::vector<CORRES>> &conv_map, int conv_map_cols, int conv_map_rows, std::vector<std::vector<int>> &random_mask, int range)
+{
+    // search
+    int match_x = 0;
+    int match_y = 0;
+    int rand_uni = 0;
+
+    std::cout << "start Random Search" << std::endl;
+    int search_range = range;
+    search_range++;
+    // conv_map_cols = 0;
+
+    for (int x = 0; x < conv_map_cols; x++)
+    {
+        // conv_map_rows = 0;
+        for (int y = 0; y < conv_map_rows; y++)
+        {
+            // std::cout << "a" << std::endl;
+            rand_uni = random_mask[x][y];
+            // std::cout << "b" << std::endl;
+            // std::cout << "(" << x << " " << y << ") " << rand_uni << "      ";
+            // std::cout << conv_map[x][y].x << " " << conv_map[x][y].y << " " << conv_map[x][y].SAD << "     ->      ";
+
+            if (conv_map[x][y].x - 3 * search_range / 2 < 0)
+            {
+                // std::cout << " x1 ";
+                if (conv_map[x][y].y - 3 * search_range / 2 < 0) // yが負の時
+                {
+                    // std::cout << " y1 ";
+                    match_x = 1 + 3 * rand_uni / search_range;
+                    match_y = 1 + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+                else if (conv_map[x][y].y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
+                {
+                    // std::cout << " y2 ";
+                    match_x = 1 + 3 * rand_uni / search_range;
+                    match_y = (block.rows - 2 - 3 * search_range) + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+                else
+                {
+                    // std::cout << " y3 ";
+                    match_x = 1 + 3 * rand_uni / search_range;
+                    match_y = conv_map[x][y].y - 3 * search_range / 2 + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+            }
+            else if (conv_map[x][y].x + 3 * search_range / 2 > block.cols)
+            {
+                // std::cout << " x2 ";
+                if (conv_map[x][y].y - 3 * search_range / 2 < 0) // yが負の時
+                {
+                    // std::cout << " y4 ";
+                    match_x = (block.cols - 2 - 3 * search_range / 2) + 3 * rand_uni / search_range;
+                    match_y = 1 + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+                else if (conv_map[x][y].y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
+                {
+                    // std::cout << " y5 ";
+                    match_x = (block.cols - 2 - 3 * search_range / 2) + 3 * rand_uni / search_range;
+                    match_y = (block.rows - 2 - 3 * search_range / 2) + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+                else
+                {
+                    // std::cout << " y6 ";
+                    match_x = (block.cols - 2 - 3 * search_range / 2) + 3 * rand_uni / search_range;
+                    match_y = conv_map[x][y].y - 3 * search_range / 2 + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+            }
+            else
+            {
+                // std::cout << " x3 ";
+                if (conv_map[x][y].y - 3 * search_range / 2 < 0) // yが負の時
+                {
+                    // std::cout << " y7 ";
+                    match_x = conv_map[x][y].x - 3 * search_range / 2 + 3 * rand_uni / search_range;
+                    match_y = 1 + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+                else if (conv_map[x][y].y + 3 * search_range / 2 > block.rows) // yが縦を超えるとき
+                {
+                    // std::cout << " y8 ";
+                    match_x = conv_map[x][y].x - 3 * search_range / 2 + 3 * rand_uni / search_range;
+                    match_y = (block.rows - 2 - 3 * search_range / 2) + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+                else
+                {
+                    // std::cout << " y9 ";
+                    match_x = conv_map[x][y].x - 3 * search_range / 2 + 3 * rand_uni / search_range;
+                    match_y = conv_map[x][y].y - 3 * search_range / 2 + 3 * rand_uni % search_range;
+                    conv_map[x][y].SAD = 0;
+                    for (int bx = -1; bx <= 1; bx++)
+                    {
+                        for (int by = -1; by <= 1; by++)
+                        {
+                            conv_map[x][y].SAD += abs(block.at<unsigned char>(conv_map[x][y].y + by, conv_map[x][y].x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                        }
+                    }
+                    conv_map[x][y].x = match_x;
+                    conv_map[x][y].y = match_y;
+                }
+            }
+            // std::cout << conv_map[x][y].x << " " << conv_map[x][y].y << " " << conv_map[x][y].SAD;
+            // std::cout << std::endl;
+
+            // conv_map_rows++;
+        }
+        // conv_map_cols++;
+    }
+}
+
+void make_Random_Map(std::vector<std::vector<int>> &random_map, int range, int conv_map_cols, int conv_map_rows)
+{
+    std::mt19937 rng(1); // 乱数
+    std::uniform_int_distribution<int> dist(0, range - 1);
+    int rand_uni = 0;
+    for (int x = 0; x < conv_map_cols; x++)
+    {
+        for (int y = 0; y < conv_map_rows; y++)
+        {
+            random_map[x][y] = dist(rng);
+        }
+    }
+}
+
+void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
 {
     /*
         block       深度推定したい画像
@@ -2404,205 +2803,237 @@ void opticalflow_PM(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
     std::cout << "start opticalflow_PM" << std::endl;
     cv::Mat frame = block.clone();
     cv::Mat frame2 = src.clone();
-    if (block.cols % 3 != 0)
+    if (block.cols % 3 != 0 || block.rows %3 != 0)
     {
         cv::Mat padblock, padsrc;
         int r = 0;
+        int l = 0;
         if (block.cols % 3 == 2)
         {
             r = 1;
         }
-        else
+        else if(block.cols %3 == 1)
         {
             r = 2;
         }
+
+        if (block.rows % 3 == 2)
+        {
+            l = 1;
+        }
+        else if(block.rows % 3 == 1)
+        {
+            l = 2;
+        }
         // 1280x720 -> 1281x720 1281 can devide by 3.
-        copyMakeBorder(block, padblock, 0, 0, 0, r, cv::BORDER_REPLICATE);
-        copyMakeBorder(src, padsrc, 0, 0, 0, r, cv::BORDER_REPLICATE);
+        copyMakeBorder(block, padblock, 0, l, 0, r, cv::BORDER_REPLICATE);
+        copyMakeBorder(src, padsrc, 0, l, 0, r, cv::BORDER_REPLICATE);
         frame = padblock.clone();
         frame2 = padsrc.clone();
     }
     std::vector<std::vector<CORRES>> conv_map(frame.cols / 3, (std::vector<CORRES>(frame.rows / 3, {0, 0, 0})));
 
     std::cout << conv_map.size() << std::endl;
-    int conv_map_cols = 0;
-    int conv_map_rows = 0;
+    int conv_map_cols = frame.cols / 3;
+    int conv_map_rows = frame.rows / 3;
 
-    int match_x = 0;
-    int match_y = 0;
+    std::vector<std::vector<int>> random_map(conv_map_cols, (std::vector<int>(conv_map_rows, 0)));
+
+    int range = 200;
+
+    make_Random_Map(random_map, range * range, conv_map_cols, conv_map_rows);
 
     // Inirializarion
-    cv::RNG rng(1); // 乱数
-    int rand_uni = 0;
-
-    int divide_num = 10;
-    for (int x = block_size / 2; x < block.cols; x += block_size)
+    /*
     {
-        conv_map_rows = 0;
-        for (int y = block_size / 2; y < block.rows; y += block_size)
+        std::mt19937 rng(1); // 乱数
+        std::uniform_int_distribution<int> dist(0, block.cols - 1);
+        int rand_uni = 0;
+
+        int divide_num = 100;
+        for (int x = block_size / 2; x < block.cols; x += block_size)
         {
-            rand_uni = rng.uniform(int(0), int(block.cols - 1));
-            // std::cout << rand_uni << "\n";
-            if (y == 1)
+            conv_map_rows = 0;
+            for (int y = block_size / 2; y < block.rows; y += block_size)
             {
-                conv_map[conv_map_cols][conv_map_rows].SAD = 0;
-                if (x + block.cols / 3 < block.cols)
+                rand_uni = dist(rng);
+                // std::cout << rand_uni << "\n";
+                if (y == 1)
                 {
-                    match_x = x + rand_uni % 3;
-                    match_y = y + 3 * (int)(rand_uni / divide_num + 1);
-                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
-                    for (int bx = -1; bx <= 1; bx++)
+                    conv_map[conv_map_cols][conv_map_rows].SAD = 0;
+                    if (x + block.cols / 3 < block.cols)
                     {
-                        for (int by = -1; by <= 1; by++)
+                        match_x = x + rand_uni % 3;
+                        match_y = y + 3 * (int)(rand_uni / divide_num + 1);
+                        conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                        conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        for (int bx = -1; bx <= 1; bx++)
                         {
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            for (int by = -1; by <= 1; by++)
+                            {
+                                conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            }
                         }
-                    }
-                }
-                else
-                {
-                    match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
-                    match_y = y + (int)(rand_uni / divide_num) + 1;
-                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
-                    for (int bx = -1; bx <= 1; bx++)
-                    {
-                        for (int by = -1; by <= 1; by++)
-                        {
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
-                        }
-                    }
-                }
-            }
-            else if (y == block.rows - 2)
-            {
-                if (x + block.cols / 3 < block.cols)
-                {
-                    match_x = x + rand_uni % 3;
-                    match_y = y + (int)(rand_uni / divide_num) - 1;
-                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
-                    for (int bx = -1; bx <= 1; bx++)
-                    {
-                        for (int by = -1; by <= 1; by++)
-                        {
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
-                        }
-                    }
-                }
-                else
-                {
-                    match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
-                    match_y = y + (int)(rand_uni / divide_num) - 1;
-                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
-                    for (int bx = -1; bx <= 1; bx++)
-                    {
-                        for (int by = -1; by <= 1; by++)
-                        {
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (x + block.cols / 3 < block.cols)
-                {
-                    match_x = x + rand_uni % 3;
-                    if (y - (int)(block.cols / divide_num) / 2 < 0)
-                    {
-                        match_y = 1 + 3 * (int)(rand_uni / divide_num);
-                    }
-                    else if (y + (int)(block.cols / divide_num) / 2 > block.rows)
-                    {
-                        match_y = (block.rows - 2) - 3 * (int)(rand_uni / divide_num);
                     }
                     else
                     {
-                        match_y = y - (int)(block.cols / divide_num) / 2 + 3 * (rand_uni / divide_num);
-                    }
-
-                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
-                    for (int bx = -1; bx <= 1; bx++)
-                    {
-                        for (int by = -1; by <= 1; by++)
+                        match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
+                        match_y = y + (int)(rand_uni / divide_num) + 1;
+                        conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                        conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        for (int bx = -1; bx <= 1; bx++)
                         {
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            for (int by = -1; by <= 1; by++)
+                            {
+                                conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by + 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            }
+                        }
+                    }
+                }
+                else if (y == block.rows - 2)
+                {
+                    if (x + block.cols / 3 < block.cols)
+                    {
+                        match_x = x + rand_uni % 3;
+                        match_y = y + (int)(rand_uni / divide_num) - 1;
+                        conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                        conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        for (int bx = -1; bx <= 1; bx++)
+                        {
+                            for (int by = -1; by <= 1; by++)
+                            {
+                                conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
+                        match_y = y + (int)(rand_uni / divide_num) - 1;
+                        conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                        conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        for (int bx = -1; bx <= 1; bx++)
+                        {
+                            for (int by = -1; by <= 1; by++)
+                            {
+                                conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by - 1, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            }
                         }
                     }
                 }
                 else
                 {
-                    match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
-                    if (y - (int)(block.cols / divide_num) / 2 < 0)
+                    if (x + block.cols / 3 < block.cols)
                     {
-                        match_y = 1 + 3 * (int)(rand_uni / divide_num);
-                    }
-                    else if (y + (int)(block.cols / divide_num) / 2 > block.rows)
-                    {
-                        match_y = (block.rows - 2) - 3 * (int)(rand_uni / divide_num);
+                        match_x = x + rand_uni % 3;
+                        if (y - 3 * (int)(block.cols / divide_num) / 2 < 0)
+                        {
+                            match_y = 1 + 3 * (int)(rand_uni / divide_num);
+                        }
+                        else if (y + 3 * (int)(block.cols / divide_num) / 2 > block.rows)
+                        {
+                            match_y = (block.rows - 2) - 3 * (int)(rand_uni / divide_num);
+                        }
+                        else
+                        {
+                            match_y = y - (int)(block.cols / divide_num) / 2 + 3 * (rand_uni / divide_num);
+                        }
+
+                        conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                        conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        for (int bx = -1; bx <= 1; bx++)
+                        {
+                            for (int by = -1; by <= 1; by++)
+                            {
+                                conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            }
+                        }
                     }
                     else
                     {
-                        match_y = y - (int)(block.cols / divide_num) / 2 + 3 * (rand_uni / divide_num);
-                    }
-
-                    conv_map[conv_map_cols][conv_map_rows].x = match_x;
-                    conv_map[conv_map_cols][conv_map_rows].y = match_y;
-                    for (int bx = -1; bx <= 1; bx++)
-                    {
-                        for (int by = -1; by <= 1; by++)
+                        match_x = 2 * block.cols / 3 - 1 + rand_uni % 3;
+                        if (y - 3 * (int)(block.cols / divide_num) / 2 < 0)
                         {
-                            conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            match_y = 1 + 3 * (int)(rand_uni / divide_num);
+                        }
+                        else if (y + 3 * (int)(block.cols / divide_num) / 2 > block.rows)
+                        {
+                            match_y = (block.rows - 2) - 3 * (int)(rand_uni / divide_num);
+                        }
+                        else
+                        {
+                            match_y = y - (int)(block.cols / divide_num) / 2 + 3 * (rand_uni / divide_num);
+                        }
+
+                        conv_map[conv_map_cols][conv_map_rows].x = match_x;
+                        conv_map[conv_map_cols][conv_map_rows].y = match_y;
+                        for (int bx = -1; bx <= 1; bx++)
+                        {
+                            for (int by = -1; by <= 1; by++)
+                            {
+                                conv_map[conv_map_cols][conv_map_rows].SAD += abs(block.at<unsigned char>(y + by, x + bx) - src.at<unsigned char>(match_y + by, match_x + bx));
+                            }
                         }
                     }
                 }
+                if (conv_map[conv_map_cols][conv_map_rows].y > block.rows)
+                    std::cout << conv_map[conv_map_cols][conv_map_rows].x << " " << conv_map[conv_map_cols][conv_map_rows].y << " " << conv_map[conv_map_cols][conv_map_rows].SAD << "\n";
+                conv_map_rows++;
             }
-            // std::cout << conv_map[conv_map_cols][conv_map_rows].x << " " << conv_map[conv_map_cols][conv_map_rows].y << " " << conv_map[conv_map_cols][conv_map_rows].SAD << "\n";
-            conv_map_rows++;
+            conv_map_cols++;
         }
-        conv_map_cols++;
     }
+    */
+
+    opticalflow_Initialize(block, src, conv_map, block_size, range, random_map);
 
     std::cout << conv_map_cols << " " << conv_map_rows << std::endl;
 
     // Propagation
     ///*
-    std::cout << "start Propagation" << std::endl;
-    for (int i = 0; i < conv_map_cols; i++)
+    for (int r = SEARCH_RANGE; r > 0; r -= 10)
     {
-        for (int j = 0; j < conv_map_rows; j++)
+        std::cout << "start Propagation" << std::endl;
+        for (int i = 0; i < conv_map_cols; i++)
         {
-            for (int bx = 0; bx <= 1; bx++)
+            for (int j = 0; j < conv_map_rows; j++)
             {
-                for (int by = -1; by <= 1; by++)
+                for (int bx = 0; bx <= 1; bx++)
                 {
-                    if (i + bx > 0 && i + bx < conv_map_cols && j + by > 0 && j + by < conv_map_rows)
+                    for (int by = -1; by <= 1; by++)
                     {
-                        if (i != i + bx && j != j + by)
+                        if (i + bx > 0 && i + bx < conv_map_cols && j + by > 0 && j + by < conv_map_rows)
                         {
-                            //std::cout << i + bx << " " << j + by << "\n";
-                            //std::cout << conv_map[i + bx][j].SAD << "\n";
-                            if (conv_map[i + bx][j + by].SAD < conv_map[i][j].SAD)
+                            if (bx == 0 && by == -1)
                             {
-                                conv_map[i][j].x = conv_map[i + bx][j + by].x;
-                                conv_map[i][j].y = conv_map[i + bx][j + by].y;
-                                conv_map[i][j].SAD = conv_map[i + bx][j + by].SAD;
+                                continue;
+                                // std::cout << i + bx << " " << j + by << "\n";
+                                // std::cout << conv_map[i + bx][j].SAD << "\n";
+                            }
+                            else if (bx == 0 && by == 0)
+                            {
+                                continue;
+                            }
+                            else
+                            {
+                                if (conv_map[i + bx][j + by].SAD < conv_map[i][j].SAD)
+                                {
+                                    conv_map[i][j].x = conv_map[i + bx][j + by].x - bx * 3;
+                                    conv_map[i][j].y = conv_map[i + bx][j + by].y - by * 3;
+                                    conv_map[i][j].SAD = conv_map[i + bx][j + by].SAD;
+                                }
                             }
                         }
                     }
                 }
             }
         }
+
+        range = r;
+        make_Random_Map(random_map, range * range, conv_map_cols, conv_map_rows);
+        opticalflow_Random_Search(block, src, conv_map, conv_map_cols, conv_map_rows, random_map, range);
     }
-    //*/
-
-    //search
-    
-
+        //*/
     int depth_H = 0;
     for (int i = 0; i < block.cols / 3; i++)
     {
@@ -2627,10 +3058,21 @@ void test_PM()
 {
     cv::Mat left = cv::imread(LEFT_IMG, 0);
     cv::Mat right = cv::imread(RIGHT_IMG, 0);
+    if (left.empty() == 1)
+    {
+        return;
+    }
+    if (right.empty() == 1)
+    {
+        return;
+    }
+
+
     cv::Mat dst;
 
     opticalflow_PM(left, right, dst, WIN_SIZE, BLOCK_MODE, L2R);
     cv::imshow("a", dst);
+    cv::imshow("b", left);
     const int key = cv::waitKey(0);
     if (key == 'q' /*113*/) // qボタンが押されたとき
     {
@@ -2643,6 +3085,7 @@ int main()
     unsigned int thread_num = std::thread::hardware_concurrency();
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
+    std::cout << "Current working directory: " << std::filesystem::current_path() << std::endl;
     // detective();
     // xmlRead();
     // subMat();
