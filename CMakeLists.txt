@@ -33,7 +33,7 @@ else()
   link_directories(/usr/local/lib)
 endif()
 # ビルドに関する設定
-set(EXECUTABLES "positioning_MT;match_Tsukuba_LBP;hog_detector;test;sub_image;stereo_camera;calibration;stereoGUI;belief_propagation;attach_img2mp4")
+set(EXECUTABLES "positioning_MT;match_Tsukuba_LBP;hog_detector;test;sub_image;stereo_camera;calibration;stereoGUI;belief_propagation;attach_img2mp4;test_pm")
 set(DEPENDENT_LIBS opencv_core;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_videoio;opencv_objdetect;opencv_calib3d;opencv_features2d;pthread)
 foreach(target IN LISTS EXECUTABLES)
   add_executable(${target} src/${target}.cpp)
