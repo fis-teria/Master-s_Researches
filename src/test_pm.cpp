@@ -19,6 +19,7 @@
 #include <functional>
 #include <random>
 #include <filesystem>
+#include <chrono>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <boost/foreach.hpp>
@@ -91,17 +92,17 @@ const int WIN_SIZE = 3;
 const int L2R = -1;
 const int R2L = 1;
 
-const int debug = 1;
-const int sim_BM_check = 3;
-const int vec_check = 2;
-const int thread_check = 1;
-
 const int SEARCH_RANGE = 128;
 
 const int COLOR_MODE = NTSS_GRAY;
 
-const std::string LEFT_IMG = "images/20231231/left/001258.jpg";
-const std::string RIGHT_IMG = "images/20231231/right/001258.jpg";
+/*
+    test data
+    images/20231231/left/004567.jpg
+    images/20240220/left/000036.jpg
+*/
+const std::string LEFT_IMG = "images/20231231/left/004567.jpg";
+const std::string RIGHT_IMG = "images/20231231/right/004567.jpg";
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -189,10 +190,90 @@ struct POSITION
     int y;
 };
 
-// シンプルなブロックマッチング グレースケール
-double sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int mode, int LorR)
+struct RESULT_SIM_BM
 {
-    if (debug == sim_BM_check)
+    int x;
+    int y;
+    int SAD;
+    double depth;
+};
+
+int LBP_filter[3][3] = {{64, 32, 16},
+                        {128, 0, 8},
+                        {1, 2, 4}};
+
+void cvt_LBP(const cv::Mat &src, cv::Mat &dst)
+{
+    cv::Mat lbp = cv::Mat(src.rows, src.cols, CV_8UC1);
+    lbp = cv::Scalar::all(0);
+    cv::Mat padsrc;
+    // cv::cvtColor(padsrc, padsrc, cv::COLOR_BGR2GRAY);
+    copyMakeBorder(src, padsrc, 1, 1, 1, 1, cv::BORDER_REPLICATE);
+
+    // cv::imshow("first", src);
+    // cv::imshow("third", lbp);
+    for (int x = 1; x < padsrc.cols - 1; x++)
+    {
+        for (int y = 1; y < padsrc.rows - 1; y++)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    if (padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) >= padsrc.at<unsigned char>(y, x))
+                        lbp.at<unsigned char>(y - 1, x - 1) += LBP_filter[i][j];
+                }
+            }
+        }
+    }
+    dst = lbp.clone();
+    // cv::imshow("second", lbp);
+}
+
+void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
+{
+    cv::Mat lbp = cv::Mat(src.rows, src.cols, CV_8UC1);
+    lbp = cv::Scalar::all(0);
+    cv::Mat padsrc;
+    // cv::cvtColor(padsrc, padsrc, cv::COLOR_BGR2GRAY);
+    copyMakeBorder(src, padsrc, 1, 1, 1, 1, cv::BORDER_REPLICATE);
+
+    // cv::imshow("first", src);
+    // cv::imshow("third", lbp);
+
+    int ave = 0;
+    for (int x = 1; x < padsrc.cols - 1; x++)
+    {
+        for (int y = 1; y < padsrc.rows - 1; y++)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    ave += (int) padsrc.at<unsigned char>(y-1 + j, x- 1+i);
+                }
+            }
+            ave /= 9;
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    if (padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) >= ave)
+                        lbp.at<unsigned char>(y - 1, x - 1) += LBP_filter[i][j];
+                }
+            }
+        }
+    }
+    dst = lbp.clone();
+    // cv::imshow("second", lbp);
+}
+
+// シンプルなブロックマッチング グレースケール
+CORRES sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int mode, int LorR)
+{
+    CORRES result;
+    int debug = 0;
+    if (debug == 1)
         std::cout << "start sim_BM" << std::endl;
 
     cv::Mat rect = src.clone();
@@ -236,7 +317,7 @@ double sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin
             // std::cout << "start block matching" << std::endl;
             for (int i = 0; i < block.cols; i++)
             {
-                for (int j = 0; j < block.rows; j++)
+                for (int j =1; j < 2/*block.rows*/; j++)
                 {
                     if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                     {
@@ -263,20 +344,24 @@ double sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sum < beta.sum; });
 
-    if (debug == sim_BM_check)
+    if (debug == 1)
         std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size();
 
     dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) + (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
-    if (debug == sim_BM_check)
+    if (debug == 1)
         std::cout << " distance = " << dist;
 
     depth = D_CALI / dist;
-    if (debug == sim_BM_check)
+    if (debug == 1)
         std::cout << " depth = " << depth << std::endl;
 
-    return depth;
-}
+    result.x = match_Result[0].x;
+    result.y = match_Result[0].y;
+    result.SAD = match_Result[0].sum;
+    // result.depth = depth;
 
+    return result;
+}
 
 // 深度マップから元画像ないの特定の距離のものを抽出する。
 void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
@@ -285,16 +370,66 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
     copy = cv::Scalar::all(0);
     int H;
 
+    int left = 0;
+    int centor = 0;
+    int right = 0;
+
     for (int y = 0; y < copy.rows; y++)
     {
         for (int x = 0; x < copy.cols; x++)
         {
             H = src.at<cv::Vec3b>(y, x)[0];
-            if ((H / D_MAG) < 3)
+            if ((H / D_MAG) < 10)
+            {
                 copy.at<unsigned char>(y, x) = 0;
+                if (x < copy.cols / 3)
+                {
+                    left++;
+                }
+                else if (x > copy.cols / 3 && x < copy.cols * 2 / 3)
+                {
+                    centor++;
+                }
+                else if (x > copy.cols * 2 / 3)
+                {
+                    right++;
+                }
+            }
             else
             {
                 copy.at<unsigned char>(y, x) = origin.at<unsigned char>(y, x);
+            }
+        }
+    }
+
+    if (left < centor && left < right)
+    {
+        for (int y = 0; y < copy.rows; y++)
+        {
+            for (int x = copy.cols / 3; x < copy.cols; x++)
+            {
+                copy.at<unsigned char>(y, x) = 0;
+            }
+        }
+    }
+    else if (centor < left && centor < right)
+    {
+        for (int y = 0; y < copy.rows; y++)
+        {
+            for (int x = 0; x < copy.cols; x++)
+            {
+                if (x < copy.cols / 3 || x > copy.cols * 2 / 3)
+                    copy.at<unsigned char>(y, x) = 0;
+            }
+        }
+    }
+    else if (right < left && centor < right)
+    {
+        for (int y = 0; y < copy.rows; y++)
+        {
+            for (int x = 2 * copy.cols / 3; x >= 0; x--)
+            {
+                copy.at<unsigned char>(y, x) = 0;
             }
         }
     }
@@ -302,10 +437,10 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
 }
 
 // ブロックマッチングの準備をする関数
-void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
+void block_Matching(cv::Mat &block, const cv::Mat &src, std::vector<std::vector<CORRES>> &conv_map, int block_size, int mode, int LorR)
 {
-    int times = 0;
-    int sum = 4;
+    int debug = 0;
+    int debug_img = 0;
 
     std::vector<int> time;
     std::vector<BLOCK_MATCHING> vec_bm;
@@ -320,27 +455,30 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
     int x_count = 0;
     int y_count = 0;
 
-    int debug_img = 0;
+    RESULT_SIM_BM result = {0, 0, 0, 0};
 
     clock_t begin = clock();
 
     // シングルスレッド
     ///*
     std::cout << "single thread" << std::endl;
-    double depth = 0;
 
+    int i = 0;
+    int j = 0;
     OMP_PARALLEL_FOR
-#pragma omp private(depth_H, depth, x, block, src)
-    for (int x = b_size / 2; x < block.cols; x += b_size)
+#pragma omp private(depth_H, result, block, src, conv_map, x, y, i, j)
+    for (int x = 0; x < conv_map.size(); x++)
     {
-        for (int y = b_size / 2; y < block.rows; y += b_size)
+        for (int y = 0; y < conv_map[x].size(); y++)
         {
             if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
             {
-                times++;
-                depth = sim_BM(block(cv::Range(y - b_size / 2, y + b_size / 2), cv::Range(x - b_size / 2, x + b_size / 2)), src, x, y, COLOR_MODE, LorR);
-#pragma omp critical
-                vec_bm.push_back(BLOCK_MATCHING(x, y, depth));
+                conv_map[x][y] = sim_BM(block(cv::Range(3 * (y + 1) - 2 - b_size / 2, 3 * (y + 1) - 2 + b_size / 2), cv::Range(3 * (x + 1) - 2 - b_size / 2, 3 * (x + 1) - 2 + b_size / 2)), src, 3 * (x + 1) - 2, 3 * (y + 1) - 2, COLOR_MODE, LorR);
+                //std::cout << "now debug" << x << " " << y << " " << conv_map[x][y].x << std::endl;
+                // vec_bm.push_back(BLOCK_MATCHING(x, y, result.depth));
+                // conv_map[x][y].x = result.x;
+                // conv_map[x][y].y = result.y;
+                // conv_map[x][y].SAD = result.SAD;
             }
         }
     }
@@ -362,7 +500,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
             if (depth_H < 0)
                 depth_H = 0;
             //*/
-            if (debug == vec_check)
+            if (debug == 1)
                 vec_bm[i].get_ELEMENTS();
             // std::cout << vec_bm[i].depth << std::endl;
             // cv::rectangle(depth_map, cv::Point(vec_bm[i].origin_x - b_size / 2, vec_bm[i].origin_y - b_size / 2), cv::Point(vec_bm[i].origin_x + b_size / 2, vec_bm[i].origin_y + b_size / 2), cv::Scalar(depth_H, 255, 255), cv::FILLED);
@@ -380,26 +518,23 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, cv::Mat &dst, int block_
             //*/
         }
         // std::cout << "synchronous" << std::endl;
-    }
-    cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
-    // cv::Mat nearline;
-    // get_depth(depth_map_HSV, nearline, block);
+        cv::cvtColor(depth_map, depth_map_HSV, cv::COLOR_HSV2BGR);
+        // cv::Mat nearline;
+        // get_depth(depth_map_HSV, nearline, block);
 
-    if (LorR == R2L)
-    {
-        cv::imshow("depth R2L", depth_map_HSV);
-        // cv::imshow("depth R2L nearline", nearline);
-        dst = depth_map_HSV;
+        if (LorR == R2L)
+        {
+            cv::imshow("depth R2L", depth_map_HSV);
+            // cv::imshow("depth R2L nearline", nearline);
+        }
+        else if (LorR == L2R)
+        {
+            cv::imshow("depth L2R", depth_map_HSV);
+            // cv::imshow("depth L2R nearline", nearline);
+        }
+        //  std::cout << "block matching time = ";
     }
-    else if (LorR == L2R)
-    {
-        cv::imshow("depth L2R", depth_map_HSV);
-        // cv::imshow("depth L2R nearline", nearline);
-        dst = depth_map_HSV;
-    }
-    //  std::cout << "block matching time = ";
 }
-
 
 void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vector<CORRES>> &conv_map, int block_size, std::vector<std::vector<POSITION>> &random_mask, int mode)
 {
@@ -852,6 +987,53 @@ void make_Random_Map(std::vector<std::vector<int>> &random_map, int range, int c
     }
 }
 
+void conv_map_to_depth_map(std::vector<std::vector<CORRES>> &conv_map, cv::Mat &block, cv::Mat &dst)
+{
+    int depth_H = 0;
+    double dist = 0;
+    int depth = 0;
+    cv::Mat depth_img = cv::Mat(block.rows, block.cols, CV_8UC3);
+    for (int i = 0; i < block.cols / 3; i++)
+    {
+        for (int j = 0; j < block.rows / 3; j++)
+        {
+            dist = sqrt((3 * (i + 1) - 2 - conv_map[i][j].x) * (3 * (i + 1) - 2 - conv_map[i][j].x) + (3 * (j + 1) - 2 - conv_map[i][j].y) * (3 * (j + 1) - 2 - conv_map[i][j].y));
+            // std::cout << 3 * (i + 1) - 2 << " " << conv_map[i][j].x << " " << 3 * (j + 1) - 2 << " " << conv_map[i][j].y << " " << dist << "    ->    ";
+            depth = D_CALI / dist;
+            // std::cout << depth << "    ->    ";
+            depth_H = depth * D_MAG;
+            if (depth_H > 150)
+                depth_H = 150;
+            if (depth_H < 0)
+                depth_H = 0;
+            // std::cout << depth_H << "\n";
+            //  cv::rectangle(dst, cv::Point(3 * (i), 3 * (j)), cv::Point(3 * (i + 1) - 1, 3 * (j + 1) - 1), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+            ///*
+            for (int bx = -1; bx <= 1; bx++)
+            {
+                for (int by = -1; by <= 1; by++)
+                {
+                    depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(depth_H, 255, 255);
+                }
+            }
+            //*/
+            // std::cout << "(" << 3 * (i + 1) - 2 << ", " << 3 * (j + 1) - 2 << ") " << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << " " << depth_H << "\n";
+        }
+    }
+    cv::cvtColor(depth_img, dst, cv::COLOR_HSV2BGR);
+
+}
+
+void Outlier_Rejection(cv::Mat &depth, cv::Mat &origin){
+    for(int x = 0; x < depth.cols; x++){
+        for(int y = 0; y < depth.rows; y++){
+            if(origin.at<unsigned char>(y,x) == 0){
+                depth.at<cv::Vec3b>(y,x) = cv::Vec3b(0,0,0);
+            }
+        }
+    }
+}
+
 void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
 {
     /*
@@ -924,38 +1106,71 @@ void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
         range /= 2;
     }
     //*/
-    int depth_H = 0;
-    int dist = 0;
-    int depth = 0;
-    cv::Mat depth_img = cv::Mat(block.rows, block.cols, CV_8UC3);
-    for (int i = 0; i < block.cols / 3; i++)
+
+    conv_map_to_depth_map(conv_map, block, dst);
+}
+
+void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
+{
+    /*
+    block       深度推定したい画像
+    src         対応を探したい画像
+    dst         深度マップを出力する画像
+    block_size  探索フレームのサイズ基本3x3
+    mode        グレースケールorカラー
+    LorR        左から右か右から左
+*/
+
+    dst = cv::Mat(block.rows, block.cols, CV_8UC3);
+    std::cout << "start opticalflow_PM" << std::endl;
+    cv::Mat frame = block.clone();
+    cv::Mat frame2 = src.clone();
+    if (block.cols % 3 != 0 || block.rows % 3 != 0)
     {
-        for (int j = 0; j < block.rows / 3; j++)
+        cv::Mat padblock, padsrc;
+        int r = 0;
+        int l = 0;
+        if (block.cols % 3 == 2)
         {
-            dist = sqrt((3 * (i + 1) - 2 - conv_map[i][j].x) * (3 * (i + 1) - 2 - conv_map[i][j].x) + (3 * (j + 1) - 2 - conv_map[i][j].y) * (3 * (j + 1) - 2 - conv_map[i][j].y));
-            // std::cout << 3 * (i + 1) - 2 << " " << conv_map[i][j].x << " " << 3 * (j + 1) - 2 << " " << conv_map[i][j].y << " " << dist << "    ->    ";
-            depth = D_CALI / dist;
-            // std::cout << depth << "    ->    ";
-            depth_H = depth * D_MAG;
-            if (depth_H > 150)
-                depth_H = 150;
-            if (depth_H < 0)
-                depth_H = 0;
-            // std::cout << depth_H << "\n";
-            //  cv::rectangle(dst, cv::Point(3 * (i), 3 * (j)), cv::Point(3 * (i + 1) - 1, 3 * (j + 1) - 1), cv::Scalar(depth_H, 255, 255), cv::FILLED);
-            ///*
-            for (int bx = -1; bx <= 1; bx++)
-            {
-                for (int by = -1; by <= 1; by++)
-                {
-                    depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(depth_H, 255, 255);
-                }
-            }
-            //*/
-            // std::cout << "(" << 3 * (i + 1) - 2 << ", " << 3 * (j + 1) - 2 << ") " << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << " " << depth_H << "\n";
+            r = 1;
         }
+        else if (block.cols % 3 == 1)
+        {
+            r = 2;
+        }
+
+        if (block.rows % 3 == 2)
+        {
+            l = 1;
+        }
+        else if (block.rows % 3 == 1)
+        {
+            l = 2;
+        }
+        // 1280x720 -> 1281x720 1281 can devide by 3.
+        copyMakeBorder(block, padblock, 0, l, 0, r, cv::BORDER_REPLICATE);
+        copyMakeBorder(src, padsrc, 0, l, 0, r, cv::BORDER_REPLICATE);
+        frame = padblock.clone();
+        frame2 = padsrc.clone();
     }
-    cv::cvtColor(depth_img, dst, cv::COLOR_HSV2BGR);
+    std::vector<std::vector<CORRES>> conv_map(frame.cols / 3, (std::vector<CORRES>(frame.rows / 3, {0, 0, 0})));
+
+    std::cout << conv_map.size() << std::endl;
+    int conv_map_cols = frame.cols / 3;
+    int conv_map_rows = frame.rows / 3;
+
+    block_Matching(frame, frame2, conv_map, WIN_SIZE, COLOR_MODE, L2R);
+
+    for (int i = 0; i < 0; i++)
+    {
+        opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
+    }
+
+    conv_map_to_depth_map(conv_map, frame, dst);
+
+    Outlier_Rejection(dst, block);
+
+    // get_depth(dst, dst, block);
 }
 
 void test_PM()
@@ -972,14 +1187,34 @@ void test_PM()
     }
 
     cv::Mat dst;
-
+    std::chrono::system_clock::time_point start, fin;
     clock_t begin = clock();
-    block_Matching(left, right, dst, WIN_SIZE, COLOR_MODE, L2R);
-    // opticalflow_PM(left, right, dst, WIN_SIZE, COLOR_MODE, L2R);
+    start = std::chrono::system_clock::now();
+
+    cvt_ILBP(left, left);
+    //cv::erode(left, left, cv::Mat(), cv::Point(-1, -1), 2);
+    //cv::dilate(left, left, cv::Mat(), cv::Point(-1, -1), 2);
+
+    cvt_ILBP(right, right);
+    //cv::erode(right, right, cv::Mat(), cv::Point(-1, -1), 2);
+    //cv::dilate(right, right, cv::Mat(), cv::Point(-1, -1), 2);
+
+    opticalflow_BM(left, right, dst, WIN_SIZE, COLOR_MODE, L2R);
+    // opticalflow_BM(right, left, dst, WIN_SIZE, COLOR_MODE, R2L);
+    //  opticalflow_PM(left, right, dst, WIN_SIZE, COLOR_MODE, L2R);
+
+    fin = std::chrono::system_clock::now();
+
     clock_t end = clock();
     print_elapsed_time(begin, end);
+
+    double time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(fin - start).count() / 1000.0);
+    printf("time %lf[s]\n", time/1000);
+
     cv::imshow("a", dst);
-    cv::imshow("b", left);
+    //cv::imwrite("images/match_sample/stereo.jpg", dst);
+    cv::imshow("left", left);
+    cv::imshow("right", right);
     const int key = cv::waitKey(0);
     if (key == 'q' /*113*/) // qボタンが押されたとき
     {
@@ -993,16 +1228,7 @@ int main()
     std::cout << "This CPU has " << thread_num << " threads" << std::endl;
 
     std::cout << "Current working directory: " << std::filesystem::current_path() << std::endl;
-    // detective();
-    // xmlRead();
-    // subMat();
-    //  thread_pool_test();
-    // test_img();
-    //  test_Mat();
-    //  test_LBP();
-    // take_image();
-    //  change_stereo();
-    // sub_image();
+
     test_PM();
     return 0;
 }

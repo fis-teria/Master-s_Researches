@@ -8,7 +8,7 @@
             "name": "(gdb) build and debug active file on Linux",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/test",
+            "program": "${workspaceFolder}/build/test_pm",
             "args": [
                 "images/20231231/left/002345.jpg",
                 "images/20231231/right/002345.jpg"

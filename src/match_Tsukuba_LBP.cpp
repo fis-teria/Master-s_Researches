@@ -198,6 +198,7 @@ void cvt_LBP(const cv::Mat &src, cv::Mat &lbp)
     }
     // cv::imshow("second", lbp);
 }
+
 int position_Check(const cv::Mat src, std::string path, int now_locate)
 {
     cv::Mat rim, sim, tim;
