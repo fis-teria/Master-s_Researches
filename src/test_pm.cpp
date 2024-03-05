@@ -387,6 +387,122 @@ CORRES sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin
     return result;
 }
 
+RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int mode, int LorR)
+{
+    RESULT_SIM_BM result = {0, 0, -1, 0};
+    int debug = 0;
+    if (debug == 1)
+        std::cout << "start sim_BM" << std::endl;
+
+    cv::Mat rect = src.clone();
+    std::vector<BM> match_Result;
+    int dist;
+    double depth;
+    int BM_size = 0;
+    int sum = 0;
+    int y = origin_y - 1;
+
+    int start_x = 0;
+    int search_range = 0;
+    int end_lange = 0;
+
+    int count = 0;
+
+    /*
+    if (DO_ILBP == 1)
+    {
+        for (int x = 0; x < block.cols; x++)
+        {
+            for (int y = 0; y < block.rows; y++)
+            {
+                if (block.at<unsigned char>(y, x) == 0)
+                    count++;
+            }
+        }
+    }
+    if(debug == 1){
+        std::cout << count << std::endl;
+    }
+    if (count >= 4)
+        return result;
+    //*/
+
+    if (LorR == R2L)
+    {
+        start_x = origin_x - 0;
+        search_range = WIDTH / 2;
+    }
+    else if (LorR == L2R)
+    {
+        start_x = origin_x - WIDTH / 2;
+        search_range = 0;
+    }
+    end_lange = origin_x + search_range;
+
+    if (start_x < 0)
+        start_x = 0;
+    if (end_lange > src.cols)
+        end_lange = src.cols;
+
+    for (int x = start_x; x < end_lange; x += block.cols)
+    {
+        if (x < src.cols)
+        {
+            // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+            // match_Result.resize(BM_size + 1);
+            // match_Result[BM_size].x = x;
+            // match_Result[BM_size].y = y;
+
+            // std::cout << "start block matching" << std::endl;
+            for (int i = 0; i < block.cols; i++)
+            {
+                for (int j = 1; j < block.rows; j++)
+                {
+                    if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
+                    {
+                        // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
+                        if (mode == NTSS_GRAY)
+                        {
+                            sum += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                        }
+                        else if (mode == NTSS_RGB)
+                        {
+                            sum += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
+                        }
+                    }
+                }
+            }
+            // match_Result[BM_size].sum = sum;
+            match_Result.push_back(BM(x, y, sum));
+            // std::cout << "sum " << sum << std::endl;
+            sum = 0;
+            BM_size++;
+        }
+    }
+
+    std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
+              { return alpha.sum < beta.sum; });
+
+    if (debug == 1)
+    {
+        std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size();
+
+        dist = sqrt(abs((origin_x - match_Result[0].x) * (origin_x - match_Result[0].x) + (origin_y - match_Result[0].y) * (origin_y - match_Result[0].x)));
+        // if (debug == 1)
+        std::cout << " distance = " << dist;
+
+        depth = D_CALI / dist;
+        // if (debug == 1)
+        std::cout << " depth = " << depth << std::endl;
+    }
+    result.x = match_Result[0].x;
+    result.y = match_Result[0].y;
+    result.SAD = match_Result[0].sum;
+    // result.depth = depth;
+
+    return result;
+}
+
 // 深度マップから元画像ないの特定の距離のものを抽出する。
 void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
 {
@@ -559,6 +675,57 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, std::vector<std::vector<
         //  std::cout << "block matching time = ";
     }
 }
+
+void block_Matching(cv::Mat &block, const cv::Mat &src, std::vector<std::vector<RESULT_SIM_BM>> &conv_map, int block_size, int mode, int LorR)
+{
+    int debug = 0;
+    int debug_img = 0;
+
+    std::vector<int> time;
+    std::vector<BLOCK_MATCHING> vec_bm;
+    cv::Mat depth_map = cv::Mat(block.rows, block.cols, CV_8UC3);
+    depth_map = cv::Scalar::all(0);
+    cv::Mat depth_map_HSV = depth_map.clone();
+    int b_size = block_size;
+    if (b_size % 2 != 1)
+        b_size++;
+
+    int depth_H = 0;
+    int x_count = 0;
+    int y_count = 0;
+
+    RESULT_SIM_BM result = {0, 0, 0, 0};
+
+    clock_t begin = clock();
+
+    // シングルスレッド
+    ///*
+    std::cout << "single thread" << std::endl;
+
+    int i = 0;
+    int j = 0;
+    OMP_PARALLEL_FOR
+#pragma omp private(depth_H, result, block, src, conv_map, x, y, i, j)
+    for (int x = 0; x < conv_map.size(); x++)
+    {
+        for (int y = 0; y < conv_map[x].size(); y++)
+        {
+            if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
+            {
+                conv_map[x][y] = sim_rBM(block(cv::Range(3 * (y + 1) - 2 - b_size / 2, 3 * (y + 1) - 2 + b_size / 2), cv::Range(3 * (x + 1) - 2 - b_size / 2, 3 * (x + 1) - 2 + b_size / 2)), src, 3 * (x + 1) - 2, 3 * (y + 1) - 2, COLOR_MODE, LorR);
+                // std::cout << "now debug" << x << " " << y << " " << conv_map[x][y].x << std::endl;
+                //  vec_bm.push_back(BLOCK_MATCHING(x, y, result.depth));
+                //  conv_map[x][y].x = result.x;
+                //  conv_map[x][y].y = result.y;
+                //  conv_map[x][y].SAD = result.SAD;
+            }
+        }
+    }
+    clock_t end = clock();
+    print_elapsed_time(begin, end);
+
+}
+
 
 void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vector<CORRES>> &conv_map, int block_size, std::vector<std::vector<POSITION>> &random_mask, int mode)
 {
@@ -1065,6 +1232,62 @@ void conv_map_to_depth_map(std::vector<std::vector<CORRES>> &conv_map, cv::Mat &
     cv::cvtColor(depth_img, dst, cv::COLOR_HSV2BGR);
 }
 
+void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv::Mat &block, cv::Mat &dst)
+{
+    int depth_H = 0;
+    double dist = 0;
+    int depth = 0;
+    cv::Mat depth_img = cv::Mat(block.rows, block.cols, CV_8UC3);
+    for (int i = 0; i < block.cols / 3; i++)
+    {
+        for (int j = 0; j < block.rows / 3; j++)
+        {
+            if (conv_map[i][j].SAD == -1)
+            {
+                for (int bx = -1; bx <= 1; bx++)
+                {
+                    for (int by = -1; by <= 1; by++)
+                    {
+                        depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(0, 0, 0);
+                    }
+                }
+            }
+            else
+            {
+                dist = sqrt((3 * (i + 1) - 2 - conv_map[i][j].x) * (3 * (i + 1) - 2 - conv_map[i][j].x) + (3 * (j + 1) - 2 - conv_map[i][j].y) * (3 * (j + 1) - 2 - conv_map[i][j].y));
+                // std::cout << 3 * (i + 1) - 2 << " " << conv_map[i][j].x << " " << 3 * (j + 1) - 2 << " " << conv_map[i][j].y << " " << dist << "    ->    ";
+                depth = D_CALI / dist;
+                // std::cout << depth << "    ->    ";
+                depth_H = depth * D_MAG;
+                if (depth_H > 150)
+                    depth_H = 150;
+                if (depth_H < 0)
+                    depth_H = 0;
+                conv_map[i][j].depth = depth_H;
+                // std::cout << depth_H << "\n";
+                //  cv::rectangle(dst, cv::Point(3 * (i), 3 * (j)), cv::Point(3 * (i + 1) - 1, 3 * (j + 1) - 1), cv::Scalar(depth_H, 255, 255), cv::FILLED);
+                ///*
+                for (int bx = -1; bx <= 1; bx++)
+                {
+                    for (int by = -1; by <= 1; by++)
+                    {
+                        if (block.at<unsigned char>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) != 0)
+                        {
+                            depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(depth_H, 255, 255);
+                        }else{
+                            depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(0, 0, 0);
+                        }
+                    }
+                }
+                //*/
+                // std::cout << "(" << 3 * (i + 1) - 2 << ", " << 3 * (j + 1) - 2 << ") " << conv_map[i][j].x << " " << conv_map[i][j].y << " " << conv_map[i][j].SAD << " " << depth_H << "\n";
+            }
+        }
+    }
+    cv::cvtColor(depth_img, dst, cv::COLOR_HSV2BGR);
+}
+
+
 void Outlier_Rejection(cv::Mat &depth, cv::Mat &origin)
 {
     for (int x = 0; x < depth.cols; x++)
@@ -1257,7 +1480,7 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
 
     for (int i = 0; i < 0; i++)
     {
-        opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
+        //opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
     }
 
     conv_map_to_depth_map(conv_map, frame, dst);
