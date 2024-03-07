@@ -21,6 +21,8 @@
 #include <boost/foreach.hpp>
 #include <boost/lexical_cast.hpp>
 
+std::string tag = ".jpg";
+
 class readXml
 {
 public:
