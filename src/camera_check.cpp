@@ -101,34 +101,32 @@ int main(int argc, char **argv)
         std::cout << std::endl;
     }
     */
-    cv::VideoCapture cap(0); // デバイスのオープン
-                             // cap.open(0);//こっちでも良い．
-                             // capの画像の解像度を変える部分 word CaptureChange
-    /*
+    cv::VideoCapture cap(0, cv::CAP_V4L2); // デバイスのオープン
+                                           // cap.open(0);//こっちでも良い．
+                                           // capの画像の解像度を変える部分 word CaptureChange
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
     cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
-    */
+
     if (!cap.isOpened()) // カメラデバイスが正常にオープンしたか確認．
     {
         // 読み込みに失敗したときの処理
-        return 0;
+        return;
     }
 
-    cv::VideoCapture cap2(2); // デバイスのオープン
-                              // cap.open(0);//こっちでも良い．
-                              // capの画像の解像度を変える部分 word CaptureChange
-    /*
+    cv::VideoCapture cap2(2, cv::CAP_V4L2); // デバイスのオープン
+                                            // cap.open(0);//こっちでも良い．
+                                            // capの画像の解像度を変える部分 word CaptureChange
     cap2.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap2.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap2.set(cv::CAP_PROP_BUFFERSIZE, 1);
     cap2.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
-    */
+
     if (!cap2.isOpened()) // カメラデバイスが正常にオープンしたか確認．
     {
         // 読み込みに失敗したときの処理
-        return 0;
+        return;
     }
 
     cv::Mat frame; // 取得したフレーム
