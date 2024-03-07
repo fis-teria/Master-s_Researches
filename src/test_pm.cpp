@@ -87,7 +87,7 @@ double D_CALI = (FOCUS * (CAM_DIS * 10)) / (PXL_WIDTH * 1000); // 距離を求�
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
-const int WIN_SIZE = 3;
+const int WIN_SIZE = 5;
 
 const int L2R = -1;
 const int R2L = 1;
@@ -103,8 +103,8 @@ const int DO_ILBP = 1;
     images/20231231/left/004567.jpg
     images/20240220/left/000036.jpg
 */
-const std::string LEFT_IMG = "images/20231231/left/004567.jpg";
-const std::string RIGHT_IMG = "images/20231231/right/004567.jpg";
+const std::string LEFT_IMG = "images/20240220/left/000036.jpg";
+const std::string RIGHT_IMG = "images/20240220/right/000036.jpg";
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -444,7 +444,7 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
     if (end_lange > src.cols)
         end_lange = src.cols;
 
-    for (int x = start_x; x < end_lange; x += block.cols)
+    for (int x = start_x; x < end_lange; x += 1)
     {
         if (x < src.cols)
         {
@@ -723,9 +723,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, std::vector<std::vector<
     }
     clock_t end = clock();
     print_elapsed_time(begin, end);
-
 }
-
 
 void opticalflow_Initialize(cv::Mat &block, cv::Mat &src, std::vector<std::vector<CORRES>> &conv_map, int block_size, std::vector<std::vector<POSITION>> &random_mask, int mode)
 {
@@ -1149,6 +1147,99 @@ void opticalflow_Propagation(std::vector<std::vector<CORRES>> &conv_map, const c
     }
 }
 
+void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, const cv::Mat &block, int conv_map_cols, int conv_map_rows, int r)
+{
+    std::cout << "start Propagation" << std::endl;
+    for (int i = 0; i < conv_map_cols; i++)
+    {
+        for (int j = 0; j < conv_map_rows; j++)
+        {
+            if (r % 2 == 1)
+            {
+                if (i - 1 > 0)
+                {
+                    if (conv_map[i - 1][j].depth != 0)
+                    {
+                        if (conv_map[i - 1][j].SAD < conv_map[i][j].SAD)
+                        {
+                            if (conv_map[i - 1][j].x + 3 < block.cols)
+                            {
+                                conv_map[i][j].x = conv_map[i - 1][j].x + 3;
+                            }
+                            else
+                            {
+                                conv_map[i][j].x = conv_map[i - 1][j].x;
+                            }
+                            conv_map[i][j].y = conv_map[i - 1][j].y;
+                            conv_map[i][j].SAD = conv_map[i - 1][j].SAD;
+                        }
+                    }
+                }
+                if (j - 1 > 0)
+                {
+                    if (conv_map[i][j - 1].depth != 0)
+                    {
+                        if (conv_map[i][j - 1].SAD < conv_map[i][j].SAD)
+                        {
+                            conv_map[i][j].x = conv_map[i][j - 1].x;
+                            if (conv_map[i][j - 1].y + 3 < block.rows)
+                            {
+                                conv_map[i][j].y = conv_map[i][j - 1].y + 3;
+                            }
+                            else
+                            {
+                                conv_map[i][j].y = conv_map[i][j - 1].y;
+                            }
+                            conv_map[i][j].SAD = conv_map[i][j - 1].SAD;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (i + 1 < conv_map_cols)
+                {
+                    if (conv_map[i + 1][j].depth != 0)
+                    {
+                        if (conv_map[i + 1][j].SAD < conv_map[i][j].SAD)
+                        {
+                            if (conv_map[i + 1][j].x - 3 > 0)
+                            {
+                                conv_map[i][j].x = conv_map[i + 1][j].x - 3;
+                            }
+                            else
+                            {
+                                conv_map[i][j].x = conv_map[i + 1][j].x;
+                            }
+                            conv_map[i][j].y = conv_map[i + 1][j].y;
+                            conv_map[i][j].SAD = conv_map[i + 1][j].SAD;
+                        }
+                    }
+                }
+                if (j + 1 < conv_map_rows)
+                {
+                    if (conv_map[i][j + 1].depth != 0)
+                    {
+                        if (conv_map[i][j + 1].SAD < conv_map[i][j].SAD)
+                        {
+                            conv_map[i][j].x = conv_map[i][j + 1].x;
+                            if (conv_map[i][j + 1].y - 3 > 0)
+                            {
+                                conv_map[i][j].y = conv_map[i][j + 1].y - 3;
+                            }
+                            else
+                            {
+                                conv_map[i][j].y = conv_map[i][j + 1].y;
+                            }
+                            conv_map[i][j].SAD = conv_map[i][j + 1].SAD;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 void make_Random_Map(std::vector<std::vector<POSITION>> &random_map, int conv_map_cols, int conv_map_rows)
 {
     std::mt19937 rng(1); // 乱数
@@ -1219,7 +1310,9 @@ void conv_map_to_depth_map(std::vector<std::vector<CORRES>> &conv_map, cv::Mat &
                         if (block.at<unsigned char>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) != 0)
                         {
                             depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(depth_H, 255, 255);
-                        }else{
+                        }
+                        else
+                        {
                             depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(0, 0, 0);
                         }
                     }
@@ -1263,7 +1356,6 @@ void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv
                     depth_H = 150;
                 if (depth_H < 0)
                     depth_H = 0;
-                conv_map[i][j].depth = depth_H;
                 // std::cout << depth_H << "\n";
                 //  cv::rectangle(dst, cv::Point(3 * (i), 3 * (j)), cv::Point(3 * (i + 1) - 1, 3 * (j + 1) - 1), cv::Scalar(depth_H, 255, 255), cv::FILLED);
                 ///*
@@ -1274,8 +1366,12 @@ void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv
                         if (block.at<unsigned char>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) != 0)
                         {
                             depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(depth_H, 255, 255);
-                        }else{
+                            conv_map[i][j].depth = depth_H;
+                        }
+                        else
+                        {
                             depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(0, 0, 0);
+                            conv_map[i][j].depth = 0;
                         }
                     }
                 }
@@ -1286,7 +1382,6 @@ void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv
     }
     cv::cvtColor(depth_img, dst, cv::COLOR_HSV2BGR);
 }
-
 
 void Outlier_Rejection(cv::Mat &depth, cv::Mat &origin)
 {
@@ -1469,7 +1564,7 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
         frame = padblock.clone();
         frame2 = padsrc.clone();
     }
-    //std::vector<std::vector<CORRES>> conv_map(frame.cols / 3, (std::vector<CORRES>(frame.rows / 3, {0, 0, 0})));
+    // std::vector<std::vector<CORRES>> conv_map(frame.cols / 3, (std::vector<CORRES>(frame.rows / 3, {0, 0, 0})));
     std::vector<std::vector<RESULT_SIM_BM>> conv_map(frame.cols / 3, (std::vector<RESULT_SIM_BM>(frame.rows / 3, {0, 0, 0})));
 
     std::cout << conv_map.size() << std::endl;
@@ -1478,14 +1573,17 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
 
     block_Matching(frame, frame2, conv_map, WIN_SIZE, COLOR_MODE, L2R);
 
+    conv_map_to_depth_map(conv_map, frame, dst);
+    cv::imshow("test1",dst);
+
     for (int i = 0; i < 0; i++)
     {
-        //opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
+        opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
+        conv_map_to_depth_map(conv_map, frame, dst);
+        cv::imshow("test2", dst);
+        cv::waitKey(1000);
     }
-
-    conv_map_to_depth_map(conv_map, frame, dst);
-
-    //Outlier_Rejection(dst, block);
+    // Outlier_Rejection(dst, block);
 
     // debug_matching_point(conv_map, frame2);
     //  get_depth(dst, dst, block);

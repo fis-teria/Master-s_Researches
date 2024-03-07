@@ -57,9 +57,38 @@ public:
     }
 };
 
-int main(){
-    readXml xml00 = readXml("camera/out_camera_data00.xml");
-    readXml xml02 = readXml("camera/out_camera_data02.xml");
+std::string make_spath(std::string dir, int var, std::string tag)
+{
+    std::string back;
+    if (var < 10)
+    {
+        back = dir + "/00000" + std::to_string(var) + tag;
+    }
+    else if (var < 100)
+    {
+        back = dir + "/0000" + std::to_string(var) + tag;
+    }
+    else if (var < 1000)
+    {
+        back = dir + "/000" + std::to_string(var) + tag;
+    }
+    else if (var < 10000)
+    {
+        back = dir + "/00" + std::to_string(var) + tag;
+    }
+    std::cout << back << std::endl;
+    return back;
+}
+
+int main()
+{
+    int write = 0;
+    std::string fir_dir_left = "images/20240307/left";
+    std::string fir_dir_right = "images/20240307/right";
+
+    readXml xml00 = readXml("camera/out_camera_data_webcam.xml");
+    readXml xml02 = readXml("camera/out_camera_data_onda.xml");
+
     /*
     for (int x = 0; x < xml00.camera_matrix.cols; x++)
     {
@@ -77,7 +106,7 @@ int main(){
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
-    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G')); 
+    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
     */
     if (!cap.isOpened()) // カメラデバイスが正常にオープンしたか確認．
     {
@@ -92,7 +121,7 @@ int main(){
     cap2.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
     cap2.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
     cap2.set(cv::CAP_PROP_BUFFERSIZE, 1);
-    cap2.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G')); 
+    cap2.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
     */
     if (!cap2.isOpened()) // カメラデバイスが正常にオープンしたか確認．
     {
@@ -112,6 +141,7 @@ int main(){
     cv::initUndistortRectifyMap(xml00.camera_matrix, xml00.distcoeffs, cv::Mat(), xml00.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx2, maty2);
 
     cv::Mat f1g, f2g;
+    int count = 0;
     while (1) // 無限ループ
     {
         cap >> frame;
@@ -119,13 +149,19 @@ int main(){
         cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
 
-        cv::resize(distort, distort, cv::Size(), 0.7, 0.7);
-        cv::resize(distort2, distort2, cv::Size(), 0.7, 0.7);
-
+        //cv::resize(distort, distort, cv::Size(), 0.7, 0.7);
+        //cv::resize(distort2, distort2, cv::Size(), 0.7, 0.7);
 
         cv::imshow("a", distort);
         cv::imshow("b", distort2);
 
+        if (write == 1)
+        {
+            std::cout << "write images " << count << std::endl;
+            cv::imwrite(make_spath(fir_dir_left, count, tag), distort);
+            cv::imwrite(make_spath(fir_dir_right, count, tag), distort2);
+            count++;
+        }
         const int key = cv::waitKey(10);
         if (key == 'q' /*113*/) // qボタンが押されたとき
         {
