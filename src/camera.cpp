@@ -80,9 +80,9 @@ std::string make_spath(std::string dir, int var, std::string tag)
     return back;
 }
 
-int main()
+int main(int argc, char **argv)
 {
-    int write = 0;
+    int write = atoi(argv[1]);
     std::string fir_dir_left = "images/20240307/left";
     std::string fir_dir_right = "images/20240307/right";
 
@@ -149,11 +149,8 @@ int main()
         cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
         cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
 
-        //cv::resize(distort, distort, cv::Size(), 0.7, 0.7);
-        //cv::resize(distort2, distort2, cv::Size(), 0.7, 0.7);
-
-        cv::imshow("a", distort);
-        cv::imshow("b", distort2);
+        // cv::resize(distort, distort, cv::Size(), 0.7, 0.7);
+        // cv::resize(distort2, distort2, cv::Size(), 0.7, 0.7);
 
         if (write == 1)
         {
@@ -161,6 +158,11 @@ int main()
             cv::imwrite(make_spath(fir_dir_left, count, tag), distort);
             cv::imwrite(make_spath(fir_dir_right, count, tag), distort2);
             count++;
+        }
+        else if (write == 0)
+        {
+            cv::imshow("a", distort);
+            cv::imshow("b", distort2);
         }
         const int key = cv::waitKey(10);
         if (key == 'q' /*113*/) // qボタンが押されたとき
