@@ -87,7 +87,7 @@ double D_CALI = (FOCUS * (CAM_DIS * 10)) / (PXL_WIDTH * 1000); // 距離を求�
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
-const int WIN_SIZE = 5;
+const int WIN_SIZE = 9;
 
 const int L2R = -1;
 const int R2L = 1;
@@ -103,8 +103,8 @@ const int DO_ILBP = 1;
     images/20231231/left/004567.jpg
     images/20240220/left/000036.jpg
 */
-const std::string LEFT_IMG = "images/20240220/left/000036.jpg";
-const std::string RIGHT_IMG = "images/20240220/right/000036.jpg";
+const std::string LEFT_IMG = "images/20231231/left/004222.jpg";
+const std::string RIGHT_IMG = "images/20231231/right/004222.jpg";
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -255,11 +255,12 @@ void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
                     ave += (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i);
                 }
             }
-            ave /= 9;
+            ave /= 9.3;
             for (int i = 0; i < 3; i++)
             {
                 for (int j = 0; j < 3; j++)
                 {
+                    // std::cout << ave << " " << (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) <<std::endl;
                     if (padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) >= ave)
                         lbp.at<unsigned char>(y - 1, x - 1) += LBP_filter[i][j];
                 }
@@ -379,11 +380,13 @@ CORRES sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin
         // if (debug == 1)
         std::cout << " depth = " << depth << std::endl;
     }
-    result.x = match_Result[0].x;
-    result.y = match_Result[0].y;
-    result.SAD = match_Result[0].sum;
-    // result.depth = depth;
-
+    if (match_Result.empty() != 1)
+    {
+        result.x = match_Result[0].x;
+        result.y = match_Result[0].y;
+        result.SAD = match_Result[0].sum;
+        // result.depth = depth;
+    }
     return result;
 }
 
@@ -400,7 +403,7 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
     double depth;
     int BM_size = 0;
     int sum = 0;
-    int y = origin_y - 1;
+    // int y = origin_y;
 
     int start_x = 0;
     int search_range = 0;
@@ -446,37 +449,40 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
 
     for (int x = start_x; x < end_lange; x += 1)
     {
-        if (x < src.cols)
+        for (int y = origin_y; y < origin_y + 10*block.rows; y += block.rows)
         {
-            // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
-            // match_Result.resize(BM_size + 1);
-            // match_Result[BM_size].x = x;
-            // match_Result[BM_size].y = y;
-
-            // std::cout << "start block matching" << std::endl;
-            for (int i = 0; i < block.cols; i++)
+            if (x < src.cols)
             {
-                for (int j = 1; j < block.rows; j++)
+                // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
+                //  match_Result.resize(BM_size + 1);
+                //  match_Result[BM_size].x = x;
+                //  match_Result[BM_size].y = y;
+
+                // std::cout << "start block matching" << std::endl;
+                for (int i = 0; i < block.cols; i++)
                 {
-                    if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
+                    for (int j = 0; j < block.rows; j++)
                     {
-                        // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
-                        if (mode == NTSS_GRAY)
+                        if (x + i >= 0 && y + j >= 0 && y + j < src.rows && x + i < src.cols)
                         {
-                            sum += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
-                        }
-                        else if (mode == NTSS_RGB)
-                        {
-                            sum += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
+                            // std::cout << x + i << " " << y + j << " " << (int)src.at<unsigned char>(y + j, x + i) << " " << (int)block.at<unsigned char>(j, i) << std::endl;
+                            if (mode == NTSS_GRAY)
+                            {
+                                sum += abs(src.at<unsigned char>(y + j, x + i) - block.at<unsigned char>(j, i));
+                            }
+                            else if (mode == NTSS_RGB)
+                            {
+                                sum += abs(src.at<cv::Vec3b>(y + j, x + i)[0] - block.at<cv::Vec3b>(j, i)[0]) + abs(src.at<cv::Vec3b>(y + j, x + i)[1] - block.at<cv::Vec3b>(j, i)[1]) + abs(src.at<cv::Vec3b>(y + j, x + i)[2] - block.at<cv::Vec3b>(j, i)[2]);
+                            }
                         }
                     }
                 }
+                // match_Result[BM_size].sum = sum;
+                match_Result.push_back(BM(x, y, sum));
+                // std::cout << "sum " << sum << std::endl;
+                sum = 0;
+                BM_size++;
             }
-            // match_Result[BM_size].sum = sum;
-            match_Result.push_back(BM(x, y, sum));
-            // std::cout << "sum " << sum << std::endl;
-            sum = 0;
-            BM_size++;
         }
     }
 
@@ -495,10 +501,14 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
         // if (debug == 1)
         std::cout << " depth = " << depth << std::endl;
     }
-    result.x = match_Result[0].x;
-    result.y = match_Result[0].y;
-    result.SAD = match_Result[0].sum;
-    // result.depth = depth;
+
+    if (match_Result.empty() != 1)
+    {
+        result.x = match_Result[0].x;
+        result.y = match_Result[0].y;
+        result.SAD = match_Result[0].sum;
+        // result.depth = depth;
+    }
 
     return result;
 }
@@ -613,7 +623,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, std::vector<std::vector<
         {
             if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
             {
-                conv_map[x][y] = sim_BM(block(cv::Range(3 * (y + 1) - 2 - b_size / 2, 3 * (y + 1) - 2 + b_size / 2), cv::Range(3 * (x + 1) - 2 - b_size / 2, 3 * (x + 1) - 2 + b_size / 2)), src, 3 * (x + 1) - 2, 3 * (y + 1) - 2, COLOR_MODE, LorR);
+                conv_map[x][y] = sim_BM(block(cv::Range(b_size * (y), b_size * (y + 1) - 1), cv::Range(b_size * (x), b_size * (x + 1) - 1)), src, b_size * (x), b_size * (y), COLOR_MODE, LorR);
                 // std::cout << "now debug" << x << " " << y << " " << conv_map[x][y].x << std::endl;
                 //  vec_bm.push_back(BLOCK_MATCHING(x, y, result.depth));
                 //  conv_map[x][y].x = result.x;
@@ -704,6 +714,7 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, std::vector<std::vector<
 
     int i = 0;
     int j = 0;
+
     OMP_PARALLEL_FOR
 #pragma omp private(depth_H, result, block, src, conv_map, x, y, i, j)
     for (int x = 0; x < conv_map.size(); x++)
@@ -712,7 +723,11 @@ void block_Matching(cv::Mat &block, const cv::Mat &src, std::vector<std::vector<
         {
             if (y + b_size / 2 < block.rows && x + b_size / 2 < block.cols)
             {
-                conv_map[x][y] = sim_rBM(block(cv::Range(3 * (y + 1) - 2 - b_size / 2, 3 * (y + 1) - 2 + b_size / 2), cv::Range(3 * (x + 1) - 2 - b_size / 2, 3 * (x + 1) - 2 + b_size / 2)), src, 3 * (x + 1) - 2, 3 * (y + 1) - 2, COLOR_MODE, LorR);
+                /*
+                std::cout << "block ( y = " << b_size * (y) << " -> " << b_size * (y + 1) - 1 << ", "
+                          << "x = " << b_size * (x) << " -> " << b_size * (x + 1) - 1 << ")" << std::endl;
+                //*/
+                conv_map[x][y] = sim_rBM(block(cv::Range(b_size * (y), b_size * (y + 1) - 1), cv::Range(b_size * (x), b_size * (x + 1) - 1)), src, b_size * (x), b_size * (y), COLOR_MODE, LorR);
                 // std::cout << "now debug" << x << " " << y << " " << conv_map[x][y].x << std::endl;
                 //  vec_bm.push_back(BLOCK_MATCHING(x, y, result.depth));
                 //  conv_map[x][y].x = result.x;
@@ -1150,7 +1165,7 @@ void opticalflow_Propagation(std::vector<std::vector<CORRES>> &conv_map, const c
 void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, const cv::Mat &block, int conv_map_cols, int conv_map_rows, int r)
 {
     std::cout << "start Propagation" << std::endl;
-    for (int i = 0; i < conv_map_cols; i++)
+    for (int i = 20; i < conv_map_cols; i++)
     {
         for (int j = 0; j < conv_map_rows; j++)
         {
@@ -1330,10 +1345,12 @@ void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv
     int depth_H = 0;
     double dist = 0;
     int depth = 0;
+    int half_win = WIN_SIZE / 2;
+    int div = WIN_SIZE / 2 + 1;
     cv::Mat depth_img = cv::Mat(block.rows, block.cols, CV_8UC3);
-    for (int i = 0; i < block.cols / 3; i++)
+    for (int i = 0; i < block.cols / WIN_SIZE; i++)
     {
-        for (int j = 0; j < block.rows / 3; j++)
+        for (int j = 0; j < block.rows / WIN_SIZE; j++)
         {
             if (conv_map[i][j].SAD == -1)
             {
@@ -1347,7 +1364,7 @@ void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv
             }
             else
             {
-                dist = sqrt((3 * (i + 1) - 2 - conv_map[i][j].x) * (3 * (i + 1) - 2 - conv_map[i][j].x) + (3 * (j + 1) - 2 - conv_map[i][j].y) * (3 * (j + 1) - 2 - conv_map[i][j].y));
+                dist = sqrt((WIN_SIZE * (i + 1) - div - conv_map[i][j].x) * (WIN_SIZE * (i + 1) - div - conv_map[i][j].x) + (WIN_SIZE * (j + 1) - div - conv_map[i][j].y) * (WIN_SIZE * (j + 1) - div - conv_map[i][j].y));
                 // std::cout << 3 * (i + 1) - 2 << " " << conv_map[i][j].x << " " << 3 * (j + 1) - 2 << " " << conv_map[i][j].y << " " << dist << "    ->    ";
                 depth = D_CALI / dist;
                 // std::cout << depth << "    ->    ";
@@ -1359,18 +1376,18 @@ void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv
                 // std::cout << depth_H << "\n";
                 //  cv::rectangle(dst, cv::Point(3 * (i), 3 * (j)), cv::Point(3 * (i + 1) - 1, 3 * (j + 1) - 1), cv::Scalar(depth_H, 255, 255), cv::FILLED);
                 ///*
-                for (int bx = -1; bx <= 1; bx++)
+                for (int bx = -half_win; bx <= half_win; bx++)
                 {
-                    for (int by = -1; by <= 1; by++)
+                    for (int by = -half_win; by <= half_win; by++)
                     {
-                        if (block.at<unsigned char>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) != 0)
+                        if (block.at<unsigned char>(WIN_SIZE * (j + 1) - div + by, WIN_SIZE * (i + 1) - div + bx) != 0)
                         {
-                            depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(depth_H, 255, 255);
+                            depth_img.at<cv::Vec3b>(WIN_SIZE * (j + 1) - div + by, WIN_SIZE * (i + 1) - div + bx) = cv::Vec3b(depth_H, 255, 255);
                             conv_map[i][j].depth = depth_H;
                         }
                         else
                         {
-                            depth_img.at<cv::Vec3b>(3 * (j + 1) - 2 + by, 3 * (i + 1) - 2 + bx) = cv::Vec3b(0, 0, 0);
+                            depth_img.at<cv::Vec3b>(WIN_SIZE * (j + 1) - div + by, WIN_SIZE * (i + 1) - div + bx) = cv::Vec3b(0, 0, 0);
                             conv_map[i][j].depth = 0;
                         }
                     }
@@ -1564,19 +1581,19 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
         frame = padblock.clone();
         frame2 = padsrc.clone();
     }
-    // std::vector<std::vector<CORRES>> conv_map(frame.cols / 3, (std::vector<CORRES>(frame.rows / 3, {0, 0, 0})));
-    std::vector<std::vector<RESULT_SIM_BM>> conv_map(frame.cols / 3, (std::vector<RESULT_SIM_BM>(frame.rows / 3, {0, 0, 0})));
+    // std::vector<std::vector<CORRES>> conv_map(frame.cols / block_size, (std::vector<CORRES>(frame.rows / block_size, {0, 0, 0})));
+    std::vector<std::vector<RESULT_SIM_BM>> conv_map(frame.cols / block_size, (std::vector<RESULT_SIM_BM>(frame.rows / block_size, {0, 0, 0, 0})));
 
     std::cout << conv_map.size() << std::endl;
-    int conv_map_cols = frame.cols / 3;
-    int conv_map_rows = frame.rows / 3;
+    int conv_map_cols = frame.cols / block_size;
+    int conv_map_rows = frame.rows / block_size;
 
     block_Matching(frame, frame2, conv_map, WIN_SIZE, COLOR_MODE, L2R);
 
     conv_map_to_depth_map(conv_map, frame, dst);
-    cv::imshow("test1",dst);
+    cv::imshow("test1", dst);
 
-    for (int i = 0; i < 0; i++)
+    for (int i = 0; i < 5; i++)
     {
         opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
         conv_map_to_depth_map(conv_map, frame, dst);

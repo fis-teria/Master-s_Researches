@@ -18,6 +18,7 @@
 #include <deque>
 #include <functional>
 #include <random>
+#include <bitset>
 #include <filesystem>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
@@ -2393,6 +2394,30 @@ void sub_image()
     }
 }
 
+void binaly()
+{
+    std::vector<int> bin(256, 0);
+    std::ofstream ofs("tools/Uniformed_LBP_Table.txt");
+    int a = 0;
+    for (int n = 0; n < 256; n++)
+    {
+        std::bitset<8> bs(n);
+        for (int i = 0; i < 8; i++)
+        {
+            if (bs.test(7) == 1)
+            {
+                bs = bs << 1;
+                bs.set(0);
+            }else{
+                bs = bs << 1;
+            }
+            int s = (int)std::bitset<8>(bs).to_ulong();
+            std::cout << s << std::endl;
+        }
+    }
+    ofs.close();
+}
+
 int main()
 {
     unsigned int thread_num = std::thread::hardware_concurrency();
@@ -2406,8 +2431,9 @@ int main()
     // test_img();
     //  test_Mat();
     //  test_LBP();
-    //take_image();
-      change_stereo();
+    // take_image();
+    //  change_stereo();
     // sub_image();
+    binaly();
     return 0;
 }

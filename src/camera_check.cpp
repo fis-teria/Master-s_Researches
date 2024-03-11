@@ -112,7 +112,7 @@ int main(int argc, char **argv)
     if (!cap.isOpened()) // カメラデバイスが正常にオープンしたか確認．
     {
         // 読み込みに失敗したときの処理
-        return;
+        return 0;
     }
 
     cv::VideoCapture cap2(2, cv::CAP_V4L2); // デバイスのオープン
@@ -126,7 +126,7 @@ int main(int argc, char **argv)
     if (!cap2.isOpened()) // カメラデバイスが正常にオープンしたか確認．
     {
         // 読み込みに失敗したときの処理
-        return;
+        return 0;
     }
 
     cv::Mat frame; // 取得したフレーム
