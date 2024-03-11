@@ -88,8 +88,8 @@ int main(int argc, char **argv)
     std::string fir_dir_left = "images/20240307/left";
     std::string fir_dir_right = "images/20240307/right";
 
-    readXml xml00 = readXml("camera/out_camera_data_webcam.xml");
-    readXml xml02 = readXml("camera/out_camera_data_onda.xml");
+    readXml xml00 = readXml("camera/out_camera_data00.xml");
+    readXml xml02 = readXml("camera/out_camera_data02.xml");
 
     /*
     for (int x = 0; x < xml00.camera_matrix.cols; x++)
@@ -164,7 +164,7 @@ int main(int argc, char **argv)
             cv::imshow("a", distort);
             cv::imshow("b", distort2);
         }
-        const int key = cv::waitKey(10);
+        const int key = cv::waitKey(300);
         if (key == 'q' /*113*/) // qボタンが押されたとき
         {
             break; // whileループから抜ける．
