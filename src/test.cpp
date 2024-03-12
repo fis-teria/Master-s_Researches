@@ -2418,6 +2418,21 @@ void binaly()
     ofs.close();
 }
 
+void HSV(){
+    cv::Mat src(100, 1000, CV_8UC3);
+    double H = 0;
+    double add = 180/1000;
+    for(int x = 0; x < src.cols;x++){
+        for(int y = 0; y < src.rows;y++){
+            src.at<cv::Vec3b>(y,x) = cv::Vec3b(H, 255,255);
+        }
+        H += 0.15;
+    }
+    cv::cvtColor(src, src, cv::COLOR_HSV2BGR);
+    cv::imshow("a", src);
+    cv::imwrite("images/test_img/hsv.jpg", src);
+    cv::waitKey(0);
+}
 int main()
 {
     unsigned int thread_num = std::thread::hardware_concurrency();
@@ -2434,6 +2449,7 @@ int main()
     // take_image();
     //  change_stereo();
     // sub_image();
-    binaly();
+    //binaly();
+    HSV();
     return 0;
 }

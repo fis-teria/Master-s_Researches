@@ -40,6 +40,7 @@ class readXml
 {
 public:
     cv::Mat camera_matrix, distcoeffs, extrinsic_param, img_points;
+    std::vector<cv::Point3f> obj_points;
     std::string FILE_NAME;
 
 public:
@@ -55,6 +56,7 @@ public:
         fs["distortion_coefficients"] >> distcoeffs;
         fs["extrinsic_parameters"] >> extrinsic_param;
         fs["image_points"] >> img_points;
+        fs["grid_points"] >> obj_points;
 
         std::cout << "constractor" << std::endl;
     }
@@ -73,9 +75,26 @@ public:
         fs["distortion_coefficients"] >> distcoeffs;
         fs["extrinsic_parameters"] >> extrinsic_param;
         fs["image_points"] >> img_points;
+        fs["grid_points"] >> obj_points;
 
         std::cout << "member function" << std::endl;
         return;
+    }
+
+    void get_grid(){
+        std::cout << "obj_points size " << this->obj_points.size() << std::endl;
+        for(int i = 0; i < this->obj_points.size();i++){
+            std::cout << this->obj_points[i] << std::endl;
+        }
+    }
+
+    void get_img_points(){
+        for(int i = 0; i < this->img_points.cols;i++){
+            for(int j = 0; j < 1;j++){
+                std::cout << this->img_points.at<cv::Point2f>(j,i) << std::endl;
+            }
+        }
+        std::cout << "img_points " << this->img_points.size() << std::endl;
     }
 };
 
@@ -98,7 +117,14 @@ int main(){
     cv::Mat R, T, E, F, perViewError;
     cv::TermCriteria criteria{10000, 10000, 0.0001};
     double Re_Projection_Error = 0;
-    Re_Projection_Error = cv::stereoCalibrate(worldPoints, xml00.img_points, xml02.img_points,
+    std::vector<cv::Point2f> img_point1(54);
+    std::vector<cv::Point2f> img_point2(54);
+    for(int i = 0; i < 54;i++){
+        img_point1[i] = xml00.img_points.at<cv::Point2f>(0, i);
+        img_point2[i] = xml02.img_points.at<cv::Point2f>(0, i);
+    }
+    xml00.get_img_points();
+    Re_Projection_Error = cv::stereoCalibrate(xml00.obj_points, img_point1, img_point2,
                         xml00.camera_matrix, xml00.distcoeffs, xml02.camera_matrix, xml02.distcoeffs,
                         left.size(), R, T, E, F, perViewError, cv::CALIB_FIX_INTRINSIC, criteria);
 

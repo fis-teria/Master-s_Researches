@@ -87,7 +87,7 @@ double D_CALI = (FOCUS * (CAM_DIS * 10)) / (PXL_WIDTH * 1000); // 距離を求�
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
-const int WIN_SIZE = 9;
+const int WIN_SIZE = 13;
 
 const int L2R = -1;
 const int R2L = 1;
@@ -102,9 +102,10 @@ const int DO_ILBP = 1;
     test data
     images/20231231/left/004567.jpg
     images/20240220/left/000036.jpg
+    images/test_img/left.JPG
 */
-const std::string LEFT_IMG = "images/20231231/left/004222.jpg";
-const std::string RIGHT_IMG = "images/20231231/right/004222.jpg";
+const std::string LEFT_IMG = "images/20231231/left/004567.jpg";
+const std::string RIGHT_IMG = "images/20231231/right/004567.jpg";
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -449,7 +450,7 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
 
     for (int x = start_x; x < end_lange; x += 1)
     {
-        for (int y = origin_y; y < origin_y + 10*block.rows; y += block.rows)
+        for (int y = origin_y; y < origin_y + (0 * block.rows) + 1; y += block.rows)
         {
             if (x < src.cols)
             {
@@ -1177,9 +1178,9 @@ void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, 
                     {
                         if (conv_map[i - 1][j].SAD < conv_map[i][j].SAD)
                         {
-                            if (conv_map[i - 1][j].x + 3 < block.cols)
+                            if (conv_map[i - 1][j].x + WIN_SIZE < block.cols)
                             {
-                                conv_map[i][j].x = conv_map[i - 1][j].x + 3;
+                                conv_map[i][j].x = conv_map[i - 1][j].x + WIN_SIZE;
                             }
                             else
                             {
@@ -1190,6 +1191,25 @@ void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, 
                         }
                     }
                 }
+                if (i - 2 > 0)
+                {
+                    if (conv_map[i - 2][j].depth != 0)
+                    {
+                        if (conv_map[i - 2][j].SAD < conv_map[i][j].SAD)
+                        {
+                            if (conv_map[i - 2][j].x + WIN_SIZE < block.cols)
+                            {
+                                conv_map[i][j].x = conv_map[i - 2][j].x + WIN_SIZE;
+                            }
+                            else
+                            {
+                                conv_map[i][j].x = conv_map[i - 2][j].x;
+                            }
+                            conv_map[i][j].y = conv_map[i - 2][j].y;
+                            conv_map[i][j].SAD = conv_map[i - 2][j].SAD;
+                        }
+                    }
+                }
                 if (j - 1 > 0)
                 {
                     if (conv_map[i][j - 1].depth != 0)
@@ -1197,15 +1217,34 @@ void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, 
                         if (conv_map[i][j - 1].SAD < conv_map[i][j].SAD)
                         {
                             conv_map[i][j].x = conv_map[i][j - 1].x;
-                            if (conv_map[i][j - 1].y + 3 < block.rows)
+                            if (conv_map[i][j - 1].y + WIN_SIZE < block.rows)
                             {
-                                conv_map[i][j].y = conv_map[i][j - 1].y + 3;
+                                conv_map[i][j].y = conv_map[i][j - 1].y + WIN_SIZE;
                             }
                             else
                             {
                                 conv_map[i][j].y = conv_map[i][j - 1].y;
                             }
                             conv_map[i][j].SAD = conv_map[i][j - 1].SAD;
+                        }
+                    }
+                }
+                if (j - 2 > 0)
+                {
+                    if (conv_map[i][j - 1].depth != 0)
+                    {
+                        if (conv_map[i][j - 2].SAD < conv_map[i][j].SAD)
+                        {
+                            conv_map[i][j].x = conv_map[i][j - 2].x;
+                            if (conv_map[i][j - 2].y + WIN_SIZE < block.rows)
+                            {
+                                conv_map[i][j].y = conv_map[i][j - 2].y + WIN_SIZE;
+                            }
+                            else
+                            {
+                                conv_map[i][j].y = conv_map[i][j -2].y;
+                            }
+                            conv_map[i][j].SAD = conv_map[i][j - 2].SAD;
                         }
                     }
                 }
@@ -1218,9 +1257,9 @@ void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, 
                     {
                         if (conv_map[i + 1][j].SAD < conv_map[i][j].SAD)
                         {
-                            if (conv_map[i + 1][j].x - 3 > 0)
+                            if (conv_map[i + 1][j].x - WIN_SIZE > 0)
                             {
-                                conv_map[i][j].x = conv_map[i + 1][j].x - 3;
+                                conv_map[i][j].x = conv_map[i + 1][j].x - WIN_SIZE;
                             }
                             else
                             {
@@ -1231,6 +1270,25 @@ void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, 
                         }
                     }
                 }
+                if (i + 2 < conv_map_cols)
+                {
+                    if (conv_map[i + 2][j].depth != 0)
+                    {
+                        if (conv_map[i + 2][j].SAD < conv_map[i][j].SAD)
+                        {
+                            if (conv_map[i + 2][j].x - WIN_SIZE > 0)
+                            {
+                                conv_map[i][j].x = conv_map[i + 2][j].x - WIN_SIZE;
+                            }
+                            else
+                            {
+                                conv_map[i][j].x = conv_map[i + 2][j].x;
+                            }
+                            conv_map[i][j].y = conv_map[i + 2][j].y;
+                            conv_map[i][j].SAD = conv_map[i + 2][j].SAD;
+                        }
+                    }
+                }
                 if (j + 1 < conv_map_rows)
                 {
                     if (conv_map[i][j + 1].depth != 0)
@@ -1238,15 +1296,34 @@ void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, 
                         if (conv_map[i][j + 1].SAD < conv_map[i][j].SAD)
                         {
                             conv_map[i][j].x = conv_map[i][j + 1].x;
-                            if (conv_map[i][j + 1].y - 3 > 0)
+                            if (conv_map[i][j + 1].y - WIN_SIZE > 0)
                             {
-                                conv_map[i][j].y = conv_map[i][j + 1].y - 3;
+                                conv_map[i][j].y = conv_map[i][j + 1].y - WIN_SIZE;
                             }
                             else
                             {
                                 conv_map[i][j].y = conv_map[i][j + 1].y;
                             }
                             conv_map[i][j].SAD = conv_map[i][j + 1].SAD;
+                        }
+                    }
+                }
+                if (j + 2 < conv_map_rows)
+                {
+                    if (conv_map[i][j + 2].depth != 0)
+                    {
+                        if (conv_map[i][j + 2].SAD < conv_map[i][j].SAD)
+                        {
+                            conv_map[i][j].x = conv_map[i][j + 2].x;
+                            if (conv_map[i][j + 2].y - WIN_SIZE > 0)
+                            {
+                                conv_map[i][j].y = conv_map[i][j + 2].y - WIN_SIZE;
+                            }
+                            else
+                            {
+                                conv_map[i][j].y = conv_map[i][j + 2].y;
+                            }
+                            conv_map[i][j].SAD = conv_map[i][j + 2].SAD;
                         }
                     }
                 }
@@ -1593,7 +1670,7 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     conv_map_to_depth_map(conv_map, frame, dst);
     cv::imshow("test1", dst);
 
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 15; i++)
     {
         opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
         conv_map_to_depth_map(conv_map, frame, dst);
@@ -1625,6 +1702,9 @@ void test_PM()
     clock_t begin = clock();
     start = std::chrono::system_clock::now();
 
+    cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
+    cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
+    
     if (DO_ILBP == 1)
     {
         cvt_ILBP(left, left);
@@ -1653,7 +1733,7 @@ void test_PM()
     if (debug == 1)
     {
         cv::imshow("a", dst);
-        // cv::imwrite("images/match_sample/stereo.jpg", dst);
+        //cv::imwrite("images/match_sample/test.jpg", dst);
         cv::imshow("left", left);
         cv::imshow("right", right);
         const int key = cv::waitKey(0);
