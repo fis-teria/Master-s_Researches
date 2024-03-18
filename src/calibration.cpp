@@ -125,7 +125,7 @@ public:
                     inputType = VIDEO_FILE;
             }
             if (inputType == CAMERA)
-                inputCapture.open(cameraID);
+                inputCapture.open(cameraID, cv::CAP_V4L2);
             if (inputType == VIDEO_FILE)
                 inputCapture.open(input);
             if (inputType != IMAGE_LIST && !inputCapture.isOpened())
