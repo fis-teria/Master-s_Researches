@@ -27,7 +27,50 @@ cv::Mat imgL;
 cv::Mat imgR;
 cv::Mat imgL_gray;
 cv::Mat imgR_gray;
- 
+
+int LBP_filter[3][3] = {{64, 32, 16},
+                        {128, 0, 8},
+                        {1, 2, 4}};
+
+void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
+{
+  cv::Mat lbp = cv::Mat(src.rows, src.cols, CV_8UC1);
+  lbp = cv::Scalar::all(0);
+  cv::Mat padsrc;
+  // cv::cvtColor(padsrc, padsrc, cv::COLOR_BGR2GRAY);
+  copyMakeBorder(src, padsrc, 1, 1, 1, 1, cv::BORDER_REPLICATE);
+
+  // cv::imshow("first", src);
+  // cv::imshow("third", lbp);
+
+  int ave = 0;
+  for (int x = 1; x < padsrc.cols - 1; x++)
+  {
+    for (int y = 1; y < padsrc.rows - 1; y++)
+    {
+      for (int i = 0; i < 3; i++)
+      {
+        for (int j = 0; j < 3; j++)
+        {
+          ave += (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i);
+        }
+      }
+      ave /= 9.3;
+      for (int i = 0; i < 3; i++)
+      {
+        for (int j = 0; j < 3; j++)
+        {
+          // std::cout << ave << " " << (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) <<std::endl;
+          if (padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) >= ave)
+            lbp.at<unsigned char>(y - 1, x - 1) += LBP_filter[i][j];
+        }
+      }
+    }
+  }
+  dst = lbp.clone();
+  // cv::imshow("second", lbp);
+}
+
 // Defining callback functions for the trackbars to update parameter values
  
 static void on_trackbar1( int, void* )
@@ -99,15 +142,17 @@ int main()
   cv::Mat Right_Stereo_Map1, Right_Stereo_Map2;
  
   // Reading the mapping values for stereo image rectification
+  /*
+  */
   cv::FileStorage cv_file2 = cv::FileStorage("data/stereo_rectify_maps.xml", cv::FileStorage::READ);
   cv_file2["Left_Stereo_Map_x"] >> Left_Stereo_Map1;
   cv_file2["Left_Stereo_Map_y"] >> Left_Stereo_Map2;
   cv_file2["Right_Stereo_Map_x"] >> Right_Stereo_Map1;
   cv_file2["Right_Stereo_Map_y"] >> Right_Stereo_Map2;
   cv_file2.release();
- 
   // Check for left and right camera IDs
   // These values can change depending on the system
+  /*
   int CamL_id{2}; // Camera ID for left camera
   int CamR_id{0}; // Camera ID for right camera
  
@@ -126,7 +171,9 @@ int main()
     std::cout << "Could not open camera with index : " << CamL_id << std::endl;
     return -1;
   }
- 
+  */
+  cv::Mat imgL = cv::imread("images/20231231/left/004567.jpg", 1);
+  cv::Mat imgR = cv::imread("images/20231231/right/004567.jpg", 1);
   // Creating a named window to be linked to the trackbars
   cv::namedWindow("disparity",cv::WINDOW_NORMAL);
   cv::resizeWindow("disparity",600,600);
@@ -149,12 +196,14 @@ int main()
   while (true)
   {
     // Capturing and storing left and right camera images
-    camL >> imgL;
-    camR >> imgR;
+    //camL >> imgL;
+    //camR >> imgR;
  
     // Converting images to grayscale
     cv::cvtColor(imgL, imgL_gray, cv::COLOR_BGR2GRAY);
     cv::cvtColor(imgR, imgR_gray, cv::COLOR_BGR2GRAY);
+    cvt_ILBP(imgL_gray, imgL_gray);
+    cvt_ILBP(imgR_gray, imgR_gray);
  
     // Initialize matrix for rectified stereo images
     cv::Mat Left_nice, Right_nice;

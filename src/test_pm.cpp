@@ -62,6 +62,7 @@ int Cam_dir_num = 2;
 
 /*
     Width   Height
+    4032    2268
     1280    720
     1024    576
     896     504
@@ -71,9 +72,9 @@ int Cam_dir_num = 2;
     384     216
 */
 
-const int WIDTH = 640 * 2;  // 1280 896
-const int HEIGHT = 360 * 2; // 720 504
-int D_MAG = 15;             // H = 距離ｘ倍率(H<150)  ex) 最長距離を10mにしたければ倍率を15にすればよい
+const int WIDTH = 4032;  // 1280 896
+const int HEIGHT = 2268; // 720 504
+int D_MAG = 15;          // H = 距離ｘ倍率(H<150)  ex) 最長距離を10mにしたければ倍率を15にすればよい
 static std::mutex m;
 
 int FOCUS = 24;                                                // 焦点 mm
@@ -87,7 +88,7 @@ double D_CALI = (FOCUS * (CAM_DIS * 10)) / (PXL_WIDTH * 1000); // 距離を求�
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
-const int WIN_SIZE = 13;
+const int WIN_SIZE = 3;
 
 const int L2R = -1;
 const int R2L = 1;
@@ -104,8 +105,8 @@ const int DO_ILBP = 1;
     images/20240220/left/000036.jpg
     images/test_img/left.JPG
 */
-const std::string LEFT_IMG = "images/20231231/left/004567.jpg";
-const std::string RIGHT_IMG = "images/20231231/right/004567.jpg";
+const std::string LEFT_IMG = "images/test_img/left.JPG";
+const std::string RIGHT_IMG = "images/test_img/right.JPG";
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -553,6 +554,8 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
         }
     }
 
+    /*
+    //左が最小
     if (left < centor && left < right)
     {
         for (int y = 0; y < copy.rows; y++)
@@ -563,6 +566,7 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
             }
         }
     }
+    //真ん中が最小
     else if (centor < left && centor < right)
     {
         for (int y = 0; y < copy.rows; y++)
@@ -574,6 +578,7 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
             }
         }
     }
+    //右が最小
     else if (right < left && centor < right)
     {
         for (int y = 0; y < copy.rows; y++)
@@ -584,6 +589,42 @@ void get_depth(const cv::Mat &src, cv::Mat &dst, const cv::Mat &origin)
             }
         }
     }
+    //*/
+    // 左が最大
+    if (left > centor && left > right)
+    {
+        for (int y = 0; y < copy.rows; y++)
+        {
+            for (int x = 0; x < copy.cols / 3; x++)
+            {
+                copy.at<unsigned char>(y, x) = 0;
+            }
+        }
+    }
+    // 真ん中が最大
+    else if (centor > left && centor > right)
+    {
+        for (int y = 0; y < copy.rows; y++)
+        {
+            for (int x = 0; x < copy.cols; x++)
+            {
+                if (x > copy.cols / 3 && x > copy.cols * 2 / 3)
+                    copy.at<unsigned char>(y, x) = 0;
+            }
+        }
+    }
+    // 右が最大
+    else if (right > left && centor < right)
+    {
+        for (int y = 0; y < copy.rows; y++)
+        {
+            for (int x = 2 * copy.cols / 3; x < copy.cols; x++)
+            {
+                copy.at<unsigned char>(y, x) = 0;
+            }
+        }
+    }
+
     dst = copy.clone();
 }
 
@@ -1242,7 +1283,7 @@ void opticalflow_Propagation(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, 
                             }
                             else
                             {
-                                conv_map[i][j].y = conv_map[i][j -2].y;
+                                conv_map[i][j].y = conv_map[i][j - 2].y;
                             }
                             conv_map[i][j].SAD = conv_map[i][j - 2].SAD;
                         }
@@ -1630,28 +1671,17 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     std::cout << "start opticalflow_PM" << std::endl;
     cv::Mat frame = block.clone();
     cv::Mat frame2 = src.clone();
-    if (block.cols % 3 != 0 || block.rows % 3 != 0)
+    if (block.cols % WIN_SIZE != 0 || block.rows % WIN_SIZE != 0)
     {
         cv::Mat padblock, padsrc;
         int r = 0;
         int l = 0;
-        if (block.cols % 3 == 2)
-        {
-            r = 1;
-        }
-        else if (block.cols % 3 == 1)
-        {
-            r = 2;
-        }
 
-        if (block.rows % 3 == 2)
-        {
-            l = 1;
-        }
-        else if (block.rows % 3 == 1)
-        {
-            l = 2;
-        }
+        if (block.cols % block_size != 0)
+            r = block_size - block.cols % block_size;
+        
+        if(block.rows % block_size != 0)
+            l = block_size - block.rows % block_size;
         // 1280x720 -> 1281x720 1281 can devide by 3.
         copyMakeBorder(block, padblock, 0, l, 0, r, cv::BORDER_REPLICATE);
         copyMakeBorder(src, padsrc, 0, l, 0, r, cv::BORDER_REPLICATE);
@@ -1670,7 +1700,7 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     conv_map_to_depth_map(conv_map, frame, dst);
     cv::imshow("test1", dst);
 
-    for (int i = 0; i < 15; i++)
+    for (int i = 0; i < 10; i++)
     {
         opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
         conv_map_to_depth_map(conv_map, frame, dst);
@@ -1680,7 +1710,7 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     // Outlier_Rejection(dst, block);
 
     // debug_matching_point(conv_map, frame2);
-    //  get_depth(dst, dst, block);
+    //get_depth(dst, dst, block);
 }
 
 void test_PM()
@@ -1702,9 +1732,9 @@ void test_PM()
     clock_t begin = clock();
     start = std::chrono::system_clock::now();
 
-    cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
-    cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
-    
+    // cv::resize(left, left, cv::Size(WIDTH, HEIGHT));
+    // cv::resize(right, right, cv::Size(WIDTH, HEIGHT));
+
     if (DO_ILBP == 1)
     {
         cvt_ILBP(left, left);
@@ -1733,7 +1763,7 @@ void test_PM()
     if (debug == 1)
     {
         cv::imshow("a", dst);
-        //cv::imwrite("images/match_sample/test.jpg", dst);
+        cv::imwrite("images/match_sample/test.jpg", dst);
         cv::imshow("left", left);
         cv::imshow("right", right);
         const int key = cv::waitKey(0);

@@ -721,7 +721,8 @@ static void saveCameraParams(Settings &s, Size &imageSize, Mat &cameraMatrix, Ma
     fs << "flags" << s.flag;
 
     fs << "fisheye_model" << s.useFisheye;
-
+    
+    std::cout << cameraMatrix.size() << std::endl; 
     fs << "camera_matrix" << cameraMatrix;
     fs << "distortion_coefficients" << distCoeffs;
 
