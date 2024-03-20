@@ -76,6 +76,7 @@ public:
         node["Input_FlipAroundHorizontalAxis"] >> flipVertical;
         node["Show_UndistortedImage"] >> showUndistorted;
         node["Input"] >> input;
+        std::cout << "input " << input << std::endl;
         node["Input_Delay"] >> delay;
         node["Fix_K1"] >> fixK1;
         node["Fix_K2"] >> fixK2;

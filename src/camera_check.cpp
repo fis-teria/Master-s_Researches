@@ -85,8 +85,8 @@ std::string make_spath(std::string dir, int var, std::string tag)
 int main(int argc, char **argv)
 {
     int write = atoi(argv[1]);
-    std::string fir_dir_left = "images/20240307/left";
-    std::string fir_dir_right = "images/20240307/right";
+    std::string fir_dir_left = "calibration_img/left";
+    std::string fir_dir_right = "calibration_img/right";
 
     readXml xml00 = readXml("camera/out_camera_data00.xml");
     readXml xml02 = readXml("camera/out_camera_data02.xml");
