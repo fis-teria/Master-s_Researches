@@ -592,7 +592,7 @@ static void calcBoardCornerPositions(Size boardSize, float squareSize, vector<Po
 static bool runCalibration(Settings &s, Size &imageSize, Mat &cameraMatrix, Mat &distCoeffs,
                            vector<vector<Point2f>> imagePoints, vector<Mat> &rvecs, vector<Mat> &tvecs,
                            vector<float> &reprojErrs, double &totalAvgErr, vector<Point3f> &newObjPoints,
-                           float grid_width, bool release_object)
+                           float grid_width, bool release_object, vector<vector<Point3f>> &obj_points)
 {
     //! [fixed_aspect]
     cameraMatrix = Mat::eye(3, 3, CV_64F);
@@ -612,6 +612,7 @@ static bool runCalibration(Settings &s, Size &imageSize, Mat &cameraMatrix, Mat 
     calcBoardCornerPositions(s.boardSize, s.squareSize, objectPoints[0], s.calibrationPattern);
     objectPoints[0][s.boardSize.width - 1].x = objectPoints[0][0].x + grid_width;
     newObjPoints = objectPoints[0];
+    obj_points.push_back(newObjPoints);
 
     objectPoints.resize(imagePoints.size(), objectPoints[0]);
 
@@ -667,7 +668,7 @@ static bool runCalibration(Settings &s, Size &imageSize, Mat &cameraMatrix, Mat 
 static void saveCameraParams(Settings &s, Size &imageSize, Mat &cameraMatrix, Mat &distCoeffs,
                              const vector<Mat> &rvecs, const vector<Mat> &tvecs,
                              const vector<float> &reprojErrs, const vector<vector<Point2f>> &imagePoints,
-                             double totalAvgErr, const vector<Point3f> &newObjPoints)
+                             double totalAvgErr, const vector<Point3f> &newObjPoints, vector<vector<Point3f>> &obj_points)
 {
     FileStorage fs(s.outputFileName, FileStorage::WRITE);
 
@@ -780,6 +781,10 @@ static void saveCameraParams(Settings &s, Size &imageSize, Mat &cameraMatrix, Ma
     {
         fs << "grid_points" << newObjPoints;
     }
+
+    if(!obj_points.empty()){
+        fs << "object_points" << obj_points;
+    }
 }
 
 //! [run_and_save]
@@ -791,14 +796,15 @@ bool runCalibrationAndSave(Settings &s, Size imageSize, Mat &cameraMatrix, Mat &
     vector<float> reprojErrs;
     double totalAvgErr = 0;
     vector<Point3f> newObjPoints;
+    vector<vector<Point3f>> obj_points;
 
     bool ok = runCalibration(s, imageSize, cameraMatrix, distCoeffs, imagePoints, rvecs, tvecs, reprojErrs,
-                             totalAvgErr, newObjPoints, grid_width, release_object);
+                             totalAvgErr, newObjPoints, grid_width, release_object, obj_points);
     cout << (ok ? "Calibration succeeded" : "Calibration failed")
          << ". avg re projection error = " << totalAvgErr << endl;
 
     if (ok)
         saveCameraParams(s, imageSize, cameraMatrix, distCoeffs, rvecs, tvecs, reprojErrs, imagePoints,
-                         totalAvgErr, newObjPoints);
+                         totalAvgErr, newObjPoints, obj_points);
     return ok;
 }
