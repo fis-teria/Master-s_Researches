@@ -786,6 +786,7 @@ static void saveCameraParams(Settings &s, Size &imageSize, Mat &cameraMatrix, Ma
 bool runCalibrationAndSave(Settings &s, Size imageSize, Mat &cameraMatrix, Mat &distCoeffs,
                            vector<vector<Point2f>> imagePoints, float grid_width, bool release_object)
 {
+    std::cout << "runCalibrationAndSave" << std::endl;
     vector<Mat> rvecs, tvecs;
     vector<float> reprojErrs;
     double totalAvgErr = 0;
