@@ -193,7 +193,7 @@ public:
         {
             Mat view0;
 
-            //inputCaptureの画像の解像度を変える部分 word CaptureChange
+            // inputCaptureの画像の解像度を変える部分 word CaptureChange
             inputCapture.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
             inputCapture.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
             inputCapture.set(cv::CAP_PROP_BUFFERSIZE, 1);
@@ -358,6 +358,7 @@ int main(int argc, char *argv[])
         bool blinkOutput = false;
 
         view = s.nextImage();
+        cv::Mat write_img = view.clone();
 
         //-----  If no more image, or got enough, then stop calibration and show result -------------
         if (mode == CAPTURING && imagePoints.size() >= (size_t)s.nrFrames)
@@ -454,7 +455,10 @@ int main(int argc, char *argv[])
         putText(view, msg, textOrigin, 1, 1, mode == CALIBRATED ? GREEN : RED);
 
         if (blinkOutput)
+        {
+            std::cout << "check corner" << std::endl;
             bitwise_not(view, view);
+        }
         //! [output_text]
         //------------------------- Video capture  output  undistorted ------------------------------
         //! [output_undistorted]
@@ -723,8 +727,8 @@ static void saveCameraParams(Settings &s, Size &imageSize, Mat &cameraMatrix, Ma
     fs << "flags" << s.flag;
 
     fs << "fisheye_model" << s.useFisheye;
-    
-    std::cout << cameraMatrix.size() << std::endl; 
+
+    std::cout << cameraMatrix.size() << std::endl;
     fs << "camera_matrix" << cameraMatrix;
     fs << "distortion_coefficients" << distCoeffs;
 
@@ -782,7 +786,8 @@ static void saveCameraParams(Settings &s, Size &imageSize, Mat &cameraMatrix, Ma
         fs << "grid_points" << newObjPoints;
     }
 
-    if(!obj_points.empty()){
+    if (!obj_points.empty())
+    {
         fs << "object_points" << obj_points;
     }
 }
