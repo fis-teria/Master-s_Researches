@@ -15,6 +15,8 @@
 using namespace cv;
 using namespace std;
 
+std::string fname = "calibrate_img/left";
+
 class Settings
 {
 public:
@@ -283,6 +285,29 @@ enum
     CALIBRATED = 2
 };
 
+std::string make_spath(std::string dir, int var, std::string tag)
+{
+    std::string back;
+    if (var < 10)
+    {
+        back = dir + "/00000" + std::to_string(var) + tag;
+    }
+    else if (var < 100)
+    {
+        back = dir + "/0000" + std::to_string(var) + tag;
+    }
+    else if (var < 1000)
+    {
+        back = dir + "/000" + std::to_string(var) + tag;
+    }
+    else if (var < 10000)
+    {
+        back = dir + "/00" + std::to_string(var) + tag;
+    }
+    std::cout << back << std::endl;
+    return back;
+}
+
 bool runCalibrationAndSave(Settings &s, Size imageSize, Mat &cameraMatrix, Mat &distCoeffs,
                            vector<vector<Point2f>> imagePoints, float grid_width, bool release_object);
 
@@ -351,6 +376,7 @@ int main(int argc, char *argv[])
     const Scalar RED(0, 0, 255), GREEN(0, 255, 0);
     const char ESC_KEY = 27;
 
+    int count = 0;
     //! [get_input]
     for (;;)
     {
@@ -457,6 +483,8 @@ int main(int argc, char *argv[])
         if (blinkOutput)
         {
             std::cout << "check corner" << std::endl;
+            cv::imwrite(make_spath(fname, count, ".jpg"), write_img);
+            count++;
             bitwise_not(view, view);
         }
         //! [output_text]

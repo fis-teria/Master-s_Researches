@@ -1,4 +1,6 @@
 /build/*
 !/build/camera
+!/build/calibrate_img
+!/build/tools
 token
 !.gitignore
