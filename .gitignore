@@ -2,5 +2,6 @@
 !/build/camera
 !/build/calibrate_img
 !/build/tools
+!/build/calibrate_output
 token
 !.gitignore

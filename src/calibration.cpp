@@ -483,7 +483,8 @@ int main(int argc, char *argv[])
         if (blinkOutput)
         {
             std::cout << "check corner" << std::endl;
-            cv::imwrite(make_spath(fname, count, ".jpg"), write_img);
+            //Use Camera Calibration
+            //cv::imwrite(make_spath(fname, count, ".jpg"), write_img);
             count++;
             bitwise_not(view, view);
         }
@@ -645,6 +646,7 @@ static bool runCalibration(Settings &s, Size &imageSize, Mat &cameraMatrix, Mat 
     objectPoints[0][s.boardSize.width - 1].x = objectPoints[0][0].x + grid_width;
     newObjPoints = objectPoints[0];
     obj_points.push_back(newObjPoints);
+    std::cout << "object point size " <<  objectPoints.size() << " " << objectPoints[0].size() << std::endl;
 
     objectPoints.resize(imagePoints.size(), objectPoints[0]);
 

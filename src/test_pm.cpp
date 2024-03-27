@@ -88,7 +88,7 @@ double D_CALI = (FOCUS * (CAM_DIS * 10)) / (PXL_WIDTH * 1000); // 距離を求�
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
-const int WIN_SIZE = 3;
+const int WIN_SIZE = 9;
 
 const int L2R = -1;
 const int R2L = 1;
@@ -99,14 +99,16 @@ const int COLOR_MODE = NTSS_GRAY;
 
 const int DO_ILBP = 1;
 
+std::vector<int> UNIFORMED_LUT(256, 0);
+
 /*
     test data
     images/20231231/left/004567.jpg
     images/20240220/left/000036.jpg
     images/test_img/left.JPG
 */
-const std::string LEFT_IMG = "images/test_img/left.JPG";
-const std::string RIGHT_IMG = "images/test_img/right.JPG";
+const std::string LEFT_IMG = "images/20231231/left/004567.jpg";
+const std::string RIGHT_IMG = "images/20231231/right/004567.jpg";
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -257,7 +259,7 @@ void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
                     ave += (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i);
                 }
             }
-            ave /= 9.3;
+            ave /= 9;
             for (int i = 0; i < 3; i++)
             {
                 for (int j = 0; j < 3; j++)
@@ -267,12 +269,44 @@ void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
                         lbp.at<unsigned char>(y - 1, x - 1) += LBP_filter[i][j];
                 }
             }
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    // std::cout << ave << " " << (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) <<std::endl;
+                    lbp.at<unsigned char>(y - 1, x - 1) = UNIFORMED_LUT[lbp.at<unsigned char>(y - 1, x - 1)];
+                    //std::cout << (int)lbp.at<unsigned char>(y - 1, x - 1) << std::endl;
+                }
+            }
         }
     }
     dst = lbp.clone();
     // cv::imshow("second", lbp);
 }
 
+void make_LUT(std::vector<int> &lut)
+{
+    std::cout << "make_LUT start" << std::endl;
+    std::ifstream ifs("tools/Uniformed_LBP_Table.txt");
+    std::string str;
+    int count = 0;
+    if (ifs.fail())
+    {
+        std::cout << "not lut file" << std::endl;
+        return;
+    }
+
+    while (getline(ifs, str))
+    {
+        lut[count] = atoi(str.c_str());
+        if (lut[count] != 0)
+        {
+            lut[count] = 80 + 5 * lut[count];
+        }
+        count++;
+    }
+    std::cout << "make_LUT end" << std::endl;
+}
 // シンプルなブロックマッチング グレースケール
 CORRES sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin_y, int mode, int LorR)
 {
@@ -1679,8 +1713,8 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
 
         if (block.cols % block_size != 0)
             r = block_size - block.cols % block_size;
-        
-        if(block.rows % block_size != 0)
+
+        if (block.rows % block_size != 0)
             l = block_size - block.rows % block_size;
         // 1280x720 -> 1281x720 1281 can devide by 3.
         copyMakeBorder(block, padblock, 0, l, 0, r, cv::BORDER_REPLICATE);
@@ -1700,7 +1734,7 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     conv_map_to_depth_map(conv_map, frame, dst);
     cv::imshow("test1", dst);
 
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 0; i++)
     {
         opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
         conv_map_to_depth_map(conv_map, frame, dst);
@@ -1710,7 +1744,7 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     // Outlier_Rejection(dst, block);
 
     // debug_matching_point(conv_map, frame2);
-    //get_depth(dst, dst, block);
+    // get_depth(dst, dst, block);
 }
 
 void test_PM()
@@ -1781,6 +1815,7 @@ int main()
 
     std::cout << "Current working directory: " << std::filesystem::current_path() << std::endl;
 
+    make_LUT(UNIFORMED_LUT);
     test_PM();
     return 0;
 }

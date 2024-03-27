@@ -40,7 +40,7 @@ class readXml
 {
 public:
     cv::Mat camera_matrix, distcoeffs, extrinsic_param, img_points;
-    std::vector<cv::Point3f> obj_points;
+    std::vector<std::vector<cv::Point3f>> obj_points;
     std::string FILE_NAME;
 
 public:
@@ -119,11 +119,15 @@ int main(){
     double Re_Projection_Error = 0;
     std::vector<cv::Point2f> img_point1(54);
     std::vector<cv::Point2f> img_point2(54);
+    cv::Mat matx, maty;
+    cv::Mat matx2, maty2;
+    cv::initUndistortRectifyMap(xml00.camera_matrix, xml00.distcoeffs, cv::Mat(), xml00.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx, maty);
+    cv::initUndistortRectifyMap(xml02.camera_matrix, xml02.distcoeffs, cv::Mat(), xml02.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx2, maty2);
     for(int i = 0; i < 54;i++){
         img_point1[i] = xml00.img_points.at<cv::Point2f>(0, i);
         img_point2[i] = xml02.img_points.at<cv::Point2f>(0, i);
     }
-    xml00.get_img_points();
+    xml00.get_grid();
     Re_Projection_Error = cv::stereoCalibrate(xml00.obj_points, img_point1, img_point2,
                         xml00.camera_matrix, xml00.distcoeffs, xml02.camera_matrix, xml02.distcoeffs,
                         left.size(), R, T, E, F, perViewError, cv::CALIB_FIX_INTRINSIC, criteria);

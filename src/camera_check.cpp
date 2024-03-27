@@ -22,6 +22,7 @@
 #include <boost/lexical_cast.hpp>
 
 std::string tag = ".jpg";
+std::string calib_file = "calibrate_output/stereo.yml";
 
 class readXml
 {
@@ -140,14 +141,39 @@ int main(int argc, char **argv)
     cv::initUndistortRectifyMap(xml02.camera_matrix, xml02.distcoeffs, cv::Mat(), xml02.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx, maty);
     cv::initUndistortRectifyMap(xml00.camera_matrix, xml00.distcoeffs, cv::Mat(), xml00.camera_matrix, cv::Size(1280, 720), CV_32FC1, matx2, maty2);
 
+    cv::Mat R1, R2, P1, P2, Q;
+    cv::Mat K1, K2, R;
+    cv::Vec3d T;
+    cv::Mat D1, D2;
+
+    cv::FileStorage fs1(calib_file, cv::FileStorage::READ);
+    fs1["K1"] >> K1;
+    fs1["K2"] >> K2;
+    fs1["D1"] >> D1;
+    fs1["D2"] >> D2;
+    fs1["R"] >> R;
+    fs1["T"] >> T;
+
+    fs1["R1"] >> R1;
+    fs1["R2"] >> R2;
+    fs1["P1"] >> P1;
+    fs1["P2"] >> P2;
+    fs1["Q"] >> Q;
+
+    cv::Mat lmapx, lmapy, rmapx, rmapy;
+
+    cv::initUndistortRectifyMap(K1, D1, R1, P1, cv::Size(1280, 720), CV_32F, lmapx, lmapy);
+    cv::initUndistortRectifyMap(K2, D2, R2, P2, cv::Size(1280, 720), CV_32F, rmapx, rmapy);
     cv::Mat f1g, f2g;
     int count = 0;
     while (1) // 無限ループ
     {
         cap >> frame;
         cap2 >> frame2;
-        cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
-        cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
+        //cv::remap(frame, distort, matx, maty, cv::INTER_LINEAR);
+        //cv::remap(frame2, distort2, matx2, maty2, cv::INTER_LINEAR);
+        cv::remap(frame, distort, lmapx, lmapy, cv::INTER_LINEAR);
+        cv::remap(frame2, distort2, rmapx, rmapy, cv::INTER_LINEAR);
 
         // cv::resize(distort, distort, cv::Size(), 0.7, 0.7);
         // cv::resize(distort2, distort2, cv::Size(), 0.7, 0.7);

@@ -143,13 +143,13 @@ int main()
  
   // Reading the mapping values for stereo image rectification
   /*
-  */
   cv::FileStorage cv_file2 = cv::FileStorage("data/stereo_rectify_maps.xml", cv::FileStorage::READ);
   cv_file2["Left_Stereo_Map_x"] >> Left_Stereo_Map1;
   cv_file2["Left_Stereo_Map_y"] >> Left_Stereo_Map2;
   cv_file2["Right_Stereo_Map_x"] >> Right_Stereo_Map1;
   cv_file2["Right_Stereo_Map_y"] >> Right_Stereo_Map2;
   cv_file2.release();
+  */
   // Check for left and right camera IDs
   // These values can change depending on the system
   /*
@@ -202,13 +202,14 @@ int main()
     // Converting images to grayscale
     cv::cvtColor(imgL, imgL_gray, cv::COLOR_BGR2GRAY);
     cv::cvtColor(imgR, imgR_gray, cv::COLOR_BGR2GRAY);
-    cvt_ILBP(imgL_gray, imgL_gray);
-    cvt_ILBP(imgR_gray, imgR_gray);
+    //cvt_ILBP(imgL_gray, imgL_gray);
+    //cvt_ILBP(imgR_gray, imgR_gray);
  
     // Initialize matrix for rectified stereo images
     cv::Mat Left_nice, Right_nice;
  
     // Applying stereo image rectification on the left image
+    /*
     cv::remap(imgL_gray,
               Left_nice,
               Left_Stereo_Map1,
@@ -225,9 +226,9 @@ int main()
               cv::INTER_LANCZOS4,
               cv::BORDER_CONSTANT,
               0);
- 
+  */
     // Calculating disparith using the StereoBM algorithm
-    stereo->compute(Left_nice,Right_nice,disp);
+    stereo->compute(imgL_gray, imgR_gray,disp);
  
     // NOTE: Code returns a 16bit signed single channel image,
     // CV_16S containing a disparity map scaled by 16. Hence it 

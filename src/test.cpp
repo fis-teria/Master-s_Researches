@@ -2396,11 +2396,25 @@ void sub_image()
 
 void binaly()
 {
-    std::vector<int> bin(256, 0);
     std::ofstream ofs("tools/Uniformed_LBP_Table.txt");
+    std::vector<int> lut(256, -1);
     int a = 0;
+    int inc_count = 0;
     for (int n = 0; n < 256; n++)
     {
+        std::cout << n << std::endl;
+        if (lut[n] < 0)
+        {
+            lut[n] = a;
+            inc_count = 1;
+        }
+        else
+        {
+            if (lut[n] > a)
+            {
+                lut[n] = a;
+            }
+        }
         std::bitset<8> bs(n);
         for (int i = 0; i < 8; i++)
         {
@@ -2408,23 +2422,42 @@ void binaly()
             {
                 bs = bs << 1;
                 bs.set(0);
-            }else{
+            }
+            else
+            {
                 bs = bs << 1;
             }
             int s = (int)std::bitset<8>(bs).to_ulong();
             std::cout << s << std::endl;
+            if (lut[s] < 0)
+            {
+                lut[s] = a;
+            }
         }
+        if (inc_count > 0)
+        {
+            a++;
+            inc_count = 0;
+        }
+        std::cout << std::endl;
+    }
+
+    for(int n = 0; n < lut.size();n++){
+        ofs << lut[n] << std::endl;
     }
     ofs.close();
 }
 
-void HSV(){
+void HSV()
+{
     cv::Mat src(100, 1000, CV_8UC3);
     double H = 0;
-    double add = 180/1000;
-    for(int x = 0; x < src.cols;x++){
-        for(int y = 0; y < src.rows;y++){
-            src.at<cv::Vec3b>(y,x) = cv::Vec3b(H, 255,255);
+    double add = 180 / 1000;
+    for (int x = 0; x < src.cols; x++)
+    {
+        for (int y = 0; y < src.rows; y++)
+        {
+            src.at<cv::Vec3b>(y, x) = cv::Vec3b(H, 255, 255);
         }
         H += 0.15;
     }
@@ -2449,7 +2482,7 @@ int main()
     // take_image();
     //  change_stereo();
     // sub_image();
-    //binaly();
-    HSV();
+    binaly();
+    // HSV();
     return 0;
 }
