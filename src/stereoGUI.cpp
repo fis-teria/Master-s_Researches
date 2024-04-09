@@ -81,8 +81,8 @@ static void on_trackbar1( int, void* )
  
 static void on_trackbar2( int, void* )
 {
-  stereo->setBlockSize(blockSize*2+5);
-  blockSize = blockSize*2+5;
+  stereo->setBlockSize(blockSize*2+1);
+  blockSize = blockSize*2+1;
 }
  
 static void on_trackbar3( int, void* )
@@ -170,17 +170,18 @@ int main()
   {
     std::cout << "Could not open camera with index : " << CamL_id << std::endl;
     return -1;
+    m
   }
   */
-  cv::Mat imgL = cv::imread("images/20231231/left/004567.jpg", 1);
-  cv::Mat imgR = cv::imread("images/20231231/right/004567.jpg", 1);
+  cv::Mat imgL = cv::imread("images/20240327/left/000320.jpg", 1);
+  cv::Mat imgR = cv::imread("images/20240327/right/000320.jpg", 1);
   // Creating a named window to be linked to the trackbars
   cv::namedWindow("disparity",cv::WINDOW_NORMAL);
   cv::resizeWindow("disparity",600,600);
  
   // Creating trackbars to dynamically update the StereoBM parameters
   cv::createTrackbar("numDisparities", "disparity", &numDisparities, 18, on_trackbar1);
-  cv::createTrackbar("blockSize", "disparity", &blockSize, 50, on_trackbar2);
+  cv::createTrackbar("blockSize", "disparity", &blockSize, 100, on_trackbar2);
   cv::createTrackbar("preFilterType", "disparity", &preFilterType, 1, on_trackbar3);
   cv::createTrackbar("preFilterSize", "disparity", &preFilterSize, 25, on_trackbar4);
   cv::createTrackbar("preFilterCap", "disparity", &preFilterCap, 62, on_trackbar5);

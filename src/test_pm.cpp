@@ -72,9 +72,9 @@ int Cam_dir_num = 2;
     384     216
 */
 
-const int WIDTH = 4032;  // 1280 896
-const int HEIGHT = 2268; // 720 504
-int D_MAG = 15;          // H = 距離ｘ倍率(H<150)  ex) 最長距離を10mにしたければ倍率を15にすればよい
+const int WIDTH = 1280; // 1280 896
+const int HEIGHT = 720; // 720 504
+int D_MAG = 15;         // H = 距離ｘ倍率(H<150)  ex) 最長距離を10mにしたければ倍率を15にすればよい
 static std::mutex m;
 
 int FOCUS = 24;                                                // 焦点 mm
@@ -88,10 +88,11 @@ double D_CALI = (FOCUS * (CAM_DIS * 10)) / (PXL_WIDTH * 1000); // 距離を求�
 const int NTSS_GRAY = 0;
 const int NTSS_RGB = 1;
 
-const int WIN_SIZE = 9;
+const int WIN_SIZE = 5;
 
 const int L2R = -1;
 const int R2L = 1;
+const int STEREO_MATCH_MODE = L2R;
 
 const int SEARCH_RANGE = 128;
 
@@ -105,10 +106,11 @@ std::vector<int> UNIFORMED_LUT(256, 0);
     test data
     images/20231231/left/004567.jpg
     images/20240220/left/000036.jpg
+    images/20240327/left/000339.jpg
     images/test_img/left.JPG
 */
-const std::string LEFT_IMG = "images/20231231/left/004567.jpg";
-const std::string RIGHT_IMG = "images/20231231/right/004567.jpg";
+const std::string LEFT_IMG = "images/20240220/left/000000.jpg";
+const std::string RIGHT_IMG = "images/20240220/right/000000.jpg";
 
 void print_elapsed_time(clock_t begin, clock_t end)
 {
@@ -204,6 +206,32 @@ struct RESULT_SIM_BM
     double depth;
 };
 
+struct DEPTH_MAT
+{
+    std::vector<std::vector<RESULT_SIM_BM>> conv_map;
+    cv::Mat depth;
+};
+
+// マウス入力用のパラメータ
+struct mouseParam
+{
+    int x;
+    int y;
+    int event;
+    int flags;
+};
+
+// コールバック関数
+void CallBackFunc(int eventType, int x, int y, int flags, void *userdata)
+{
+    mouseParam *ptr = static_cast<mouseParam *>(userdata);
+
+    ptr->x = x;
+    ptr->y = y;
+    ptr->event = eventType;
+    ptr->flags = flags;
+}
+
 int LBP_filter[3][3] = {{64, 32, 16},
                         {128, 0, 8},
                         {1, 2, 4}};
@@ -259,7 +287,7 @@ void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
                     ave += (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i);
                 }
             }
-            ave /= 9;
+            ave /= 8;
             for (int i = 0; i < 3; i++)
             {
                 for (int j = 0; j < 3; j++)
@@ -275,7 +303,7 @@ void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
                 {
                     // std::cout << ave << " " << (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) <<std::endl;
                     lbp.at<unsigned char>(y - 1, x - 1) = UNIFORMED_LUT[lbp.at<unsigned char>(y - 1, x - 1)];
-                    //std::cout << (int)lbp.at<unsigned char>(y - 1, x - 1) << std::endl;
+                    // std::cout << (int)lbp.at<unsigned char>(y - 1, x - 1) << std::endl;
                 }
             }
         }
@@ -301,7 +329,8 @@ void make_LUT(std::vector<int> &lut)
         lut[count] = atoi(str.c_str());
         if (lut[count] != 0)
         {
-            lut[count] = 80 + 5 * lut[count];
+            double dist = 255 / 35;
+            lut[count] = dist * lut[count];
         }
         count++;
     }
@@ -363,7 +392,7 @@ CORRES sim_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int origin
     if (start_x < 0)
         start_x = 0;
     if (end_lange > src.cols)
-        end_lange = src.cols;
+        end_lange = src.cols - WIN_SIZE;
 
     for (int x = start_x; x < end_lange; x += block.cols)
     {
@@ -439,7 +468,7 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
     double depth;
     int BM_size = 0;
     int sum = 0;
-    // int y = origin_y;
+    int start_y = origin_y + 10;
 
     int start_x = 0;
     int search_range = 0;
@@ -466,12 +495,12 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
         return result;
     //*/
 
-    if (LorR == R2L)
+    if (LorR == L2R)
     {
         start_x = origin_x - 0;
         search_range = WIDTH / 2;
     }
-    else if (LorR == L2R)
+    else if (LorR == R2L)
     {
         start_x = origin_x - WIDTH / 2;
         search_range = 0;
@@ -481,11 +510,11 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
     if (start_x < 0)
         start_x = 0;
     if (end_lange > src.cols)
-        end_lange = src.cols;
+        end_lange = src.cols - WIN_SIZE;
 
     for (int x = start_x; x < end_lange; x += 1)
     {
-        for (int y = origin_y; y < origin_y + (0 * block.rows) + 1; y += block.rows)
+        for (int y = start_y; y < start_y + (0) + 1; y++)
         {
             if (x < src.cols)
             {
@@ -495,6 +524,13 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
                 //  match_Result[BM_size].y = y;
 
                 // std::cout << "start block matching" << std::endl;
+                /*
+                rect.copyTo(src);
+                rect.convertTo(rect, CV_8UC3);
+                cv::rectangle(rect, cv::Point(x, y), cv::Point(x + block.cols, y + block.rows), cv::Scalar(255, 0, 0), 1);
+                cv::imshow("dd", rect);
+                const int key = cv::waitKey(10);
+                //*/
                 for (int i = 0; i < block.cols; i++)
                 {
                     for (int j = 0; j < block.rows; j++)
@@ -521,10 +557,17 @@ RESULT_SIM_BM sim_rBM(const cv::Mat &block, const cv::Mat &src, int origin_x, in
             }
         }
     }
-
     std::sort(match_Result.begin(), match_Result.end(), [](const BM &alpha, const BM &beta)
               { return alpha.sum < beta.sum; });
-
+    /*
+    std::string file = "logs/stereo/" + std::to_string(origin_x) + "x" + std::to_string(origin_y) + ".txt";
+    std::cout << file << std::endl;
+    std::ofstream ofs(file);
+    for(int i = 0; i< match_Result.size(); i++){
+        ofs << match_Result[i].x << ", " << match_Result[i].y << ", " << match_Result[i].sum << "\n";
+    }
+    ofs.close();
+    */
     if (debug == 1)
     {
         std::cout << "origin point (" << origin_x << " " << origin_y << ") matching point (" << match_Result[0].x << " " << match_Result[0].y << ") " << match_Result[0].sum << " " << match_Result.size();
@@ -1496,7 +1539,7 @@ void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv
 {
     int depth_H = 0;
     double dist = 0;
-    int depth = 0;
+    double depth = 0;
     int half_win = WIN_SIZE / 2;
     int div = WIN_SIZE / 2 + 1;
     cv::Mat depth_img = cv::Mat(block.rows, block.cols, CV_8UC3);
@@ -1535,7 +1578,7 @@ void conv_map_to_depth_map(std::vector<std::vector<RESULT_SIM_BM>> &conv_map, cv
                         if (block.at<unsigned char>(WIN_SIZE * (j + 1) - div + by, WIN_SIZE * (i + 1) - div + bx) != 0)
                         {
                             depth_img.at<cv::Vec3b>(WIN_SIZE * (j + 1) - div + by, WIN_SIZE * (i + 1) - div + bx) = cv::Vec3b(depth_H, 255, 255);
-                            conv_map[i][j].depth = depth_H;
+                            conv_map[i][j].depth = depth;
                         }
                         else
                         {
@@ -1614,6 +1657,23 @@ void check_pixel(cv::Mat &src)
     outputfile.close();
 }
 
+void rectAngle(cv::Mat &src, int _x, int _y, int win)
+{
+    cv::Mat img;
+    src.copyTo(img);
+    for (int x = _x - 1; x < _x + win + 1; x++)
+    {
+        for (int y = _y - 1; y < _y + win + 1; y++)
+        {
+            if (x >= 0 && x < src.cols && y >= 0 && y < src.rows)
+            {
+                img.at<unsigned char>(y, x) = 255;
+            }
+        }
+    }
+    img.copyTo(src);
+}
+
 void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
 {
     /*
@@ -1690,7 +1750,7 @@ void opticalflow_PM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     conv_map_to_depth_map(conv_map, block, dst);
 }
 
-void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, int mode, int LorR)
+void opticalflow_BM(cv::Mat &block, cv::Mat &src, DEPTH_MAT &dst, int block_size, int mode, int LorR)
 {
     /*
     block       深度推定したい画像
@@ -1701,7 +1761,7 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     LorR        左から右か右から左
 */
 
-    dst = cv::Mat(block.rows, block.cols, CV_8UC3);
+    dst.depth = cv::Mat(block.rows, block.cols, CV_8UC3);
     std::cout << "start opticalflow_PM" << std::endl;
     cv::Mat frame = block.clone();
     cv::Mat frame2 = src.clone();
@@ -1725,22 +1785,26 @@ void opticalflow_BM(cv::Mat &block, cv::Mat &src, cv::Mat &dst, int block_size, 
     // std::vector<std::vector<CORRES>> conv_map(frame.cols / block_size, (std::vector<CORRES>(frame.rows / block_size, {0, 0, 0})));
     std::vector<std::vector<RESULT_SIM_BM>> conv_map(frame.cols / block_size, (std::vector<RESULT_SIM_BM>(frame.rows / block_size, {0, 0, 0, 0})));
 
-    std::cout << conv_map.size() << std::endl;
+    std::cout << "frame size : " << frame.size() << std::endl;
+    std::cout << "frame2 size : " << frame2.size() << std::endl;
+    std::cout << "conv_map size :  [" << conv_map.size() << ", " << conv_map[0].size() << "]" << std::endl;
     int conv_map_cols = frame.cols / block_size;
     int conv_map_rows = frame.rows / block_size;
 
     block_Matching(frame, frame2, conv_map, WIN_SIZE, COLOR_MODE, L2R);
 
-    conv_map_to_depth_map(conv_map, frame, dst);
-    cv::imshow("test1", dst);
+    conv_map_to_depth_map(conv_map, frame, dst.depth);
+    cv::imshow("test1", dst.depth);
 
     for (int i = 0; i < 0; i++)
     {
         opticalflow_Propagation(conv_map, frame, conv_map_cols, conv_map_rows, i);
-        conv_map_to_depth_map(conv_map, frame, dst);
-        cv::imshow("test2", dst);
+        conv_map_to_depth_map(conv_map, frame, dst.depth);
+        cv::imshow("test2", dst.depth);
         cv::waitKey(1000);
     }
+
+    dst.conv_map = conv_map;
     // Outlier_Rejection(dst, block);
 
     // debug_matching_point(conv_map, frame2);
@@ -1761,7 +1825,7 @@ void test_PM()
         return;
     }
 
-    cv::Mat dst;
+    DEPTH_MAT dst;
     std::chrono::system_clock::time_point start, fin;
     clock_t begin = clock();
     start = std::chrono::system_clock::now();
@@ -1782,7 +1846,16 @@ void test_PM()
     if (debug == 1)
         check_pixel(left);
 
-    opticalflow_BM(left, right, dst, WIN_SIZE, COLOR_MODE, L2R);
+    // cv::Sobel(left, left, CV_8U, 1, 0);
+    // cv::Sobel(right, right, CV_8U, 0, 1);
+    if (STEREO_MATCH_MODE == R2L)
+    {
+        opticalflow_BM(right, left, dst, WIN_SIZE, COLOR_MODE, STEREO_MATCH_MODE);
+    }
+    else if (STEREO_MATCH_MODE == L2R)
+    {
+        opticalflow_BM(left, right, dst, WIN_SIZE, COLOR_MODE, STEREO_MATCH_MODE);
+    }
     // opticalflow_BM(right, left, dst, WIN_SIZE, COLOR_MODE, R2L);
     //  opticalflow_PM(left, right, dst, WIN_SIZE, COLOR_MODE, L2R);
 
@@ -1794,16 +1867,43 @@ void test_PM()
     double time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(fin - start).count() / 1000.0);
     printf("time %lf[s]\n", time / 1000);
 
+    cv::Mat diff;
+    cv::absdiff(left, right, diff);
+    cv::imshow("l - r", diff);
+
+    mouseParam mouseEvent;
     if (debug == 1)
     {
-        cv::imshow("a", dst);
-        cv::imwrite("images/match_sample/test.jpg", dst);
+        cv::imshow("a", dst.depth);
+        cv::imwrite("images/match_sample/test.jpg", dst.depth);
         cv::imshow("left", left);
         cv::imshow("right", right);
-        const int key = cv::waitKey(0);
-        if (key == 'q' /*113*/) // qボタンが押されたとき
+        // コールバックの設定
+        cv::setMouseCallback("a", CallBackFunc, &mouseEvent);
+        while (1)
         {
-            // break; // whileループから抜ける．
+            if (mouseEvent.event == cv::EVENT_LBUTTONDOWN)
+            {
+                // クリック後のマウスの座標を出力
+                std::cout << mouseEvent.x << " , " << mouseEvent.y;
+                std::cout << " :  co_x, co_y, depth " << dst.conv_map[(int)(mouseEvent.x / WIN_SIZE)][(int)(mouseEvent.y / WIN_SIZE)].x << ", " << dst.conv_map[(int)(mouseEvent.x / WIN_SIZE)][(int)(mouseEvent.y / WIN_SIZE)].y << ", " << dst.conv_map[(int)(mouseEvent.x / WIN_SIZE)][(int)(mouseEvent.y / WIN_SIZE)].depth << std::endl;
+                if (STEREO_MATCH_MODE == R2L)
+                {
+                    rectAngle(left, dst.conv_map[(int)(mouseEvent.x / WIN_SIZE)][(int)(mouseEvent.y / WIN_SIZE)].x, dst.conv_map[(int)(mouseEvent.x / WIN_SIZE)][(int)(mouseEvent.y / WIN_SIZE)].y, WIN_SIZE);
+                    cv::imshow("left", left);
+                }
+                else if (STEREO_MATCH_MODE == L2R)
+                {
+                    rectAngle(right, dst.conv_map[(int)(mouseEvent.x / WIN_SIZE)][(int)(mouseEvent.y / WIN_SIZE)].x, dst.conv_map[(int)(mouseEvent.x / WIN_SIZE)][(int)(mouseEvent.y / WIN_SIZE)].y, WIN_SIZE);
+                    cv::imshow("right", right);
+                }
+            }
+            // 右クリックがあったら終了
+            const int key = cv::waitKey(100);
+            if (key == 'q' /*113*/) // qボタンが押されたとき
+            {
+                break; // whileループから抜ける．
+            }
         }
     }
 }
