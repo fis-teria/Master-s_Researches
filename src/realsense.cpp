@@ -1,5 +1,5 @@
 #include <opencv2/opencv.hpp>
-#include <librealsense2/rs.hpp>
+#include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
 
 #include <cstdio>
 #include <iostream>
@@ -37,10 +37,197 @@
 #define OMP_PARALLEL_FOR
 #endif
 
-int main(){
-    rs2::colorizer color_map;
+std::vector<int> UNIFORMED_LUT(256, 0);
+
+int LBP_filter[3][3] = {{64, 32, 16},
+                        {128, 0, 8},
+                        {1, 2, 4}};
+
+void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
+{
+    cv::Mat lbp = cv::Mat(src.rows, src.cols, CV_8UC1);
+    lbp = cv::Scalar::all(0);
+    cv::Mat padsrc, gray;
+    cv::cvtColor(src, gray, cv::COLOR_BGR2GRAY);
+    copyMakeBorder(gray, padsrc, 1, 1, 1, 1, cv::BORDER_REPLICATE);
+
+    // cv::imshow("first", src);
+    // cv::imshow("third", lbp);
+
+    int ave = 0;
+    for (int x = 1; x < padsrc.cols - 1; x++)
+    {
+        for (int y = 1; y < padsrc.rows - 1; y++)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    ave += (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i);
+                }
+            }
+            ave /= 8;
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    // std::cout << ave << " " << (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) <<std::endl;
+                    if (padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) >= ave)
+                        lbp.at<unsigned char>(y - 1, x - 1) += LBP_filter[i][j];
+                }
+            }
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    // std::cout << ave << " " << (int)padsrc.at<unsigned char>(y - 1 + j, x - 1 + i) <<std::endl;
+                    lbp.at<unsigned char>(y - 1, x - 1) = UNIFORMED_LUT[lbp.at<unsigned char>(y - 1, x - 1)];
+                    // std::cout << (int)lbp.at<unsigned char>(y - 1, x - 1) << std::endl;
+                }
+            }
+        }
+    }
+    dst = lbp.clone();
+    // cv::imshow("second", lbp);
+}
+
+void make_LUT(std::vector<int> &lut)
+{
+    std::cout << "make_LUT start" << std::endl;
+    std::ifstream ifs("tools/Uniformed_LBP_Table.txt");
+    std::string str;
+    int count = 0;
+    if (ifs.fail())
+    {
+        std::cout << "not lut file" << std::endl;
+        return;
+    }
+
+    while (getline(ifs, str))
+    {
+        lut[count] = atoi(str.c_str());
+        if (lut[count] != 0)
+        {
+            double dist = 255 / 35;
+            lut[count] = dist * lut[count];
+        }
+        count++;
+    }
+    std::cout << "make_LUT end" << std::endl;
+}
+// License: Apache 2.0. See LICENSE file in root directory.
+// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+
+// Include short list of convenience functions for rendering
+
+// Capture Example demonstrates how to
+// capture depth and color video streams and render them to the screen
+int main(int argc, char *argv[])
+try
+{
+
+    make_LUT(UNIFORMED_LUT);
+
+    int WIDTH = 640;
+    int HEIGHT = 480;
+    int FPS = 30;
+    rs2::config config;
+    config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
+    config.enable_stream(RS2_STREAM_DEPTH, WIDTH, HEIGHT, RS2_FORMAT_Z16, FPS);
+    config.enable_stream(RS2_STREAM_GYRO);
+    config.enable_stream(RS2_STREAM_ACCEL);
+
     rs2::pipeline pipe;
-    
-    pipe.start();
-    return 0;
+    pipe.start(config);
+
+    rs2::colorizer color_map;
+    rs2::align align(RS2_STREAM_COLOR);
+
+    for (int i = 0; i < 3; i++)
+    {
+        rs2::frameset frames = pipe.wait_for_frames();
+        cv::waitKey(10);
+    }
+
+    while (true)
+    {
+        rs2::frameset frames = pipe.wait_for_frames();
+        auto aligned_frames = align.process(frames);
+        rs2::video_frame color_frame = aligned_frames.first(RS2_STREAM_COLOR);
+        rs2::video_frame depth_frame = aligned_frames.get_depth_frame().apply_filter(color_map);
+
+        cv::Mat color_image(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)color_frame.get_data(), cv::Mat::AUTO_STEP);
+        cv::Mat depth_image(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)depth_frame.get_data(), cv::Mat::AUTO_STEP);
+
+        cv::Mat images(cv::Size(2 * WIDTH, HEIGHT), CV_8UC3);
+        cv::Mat color_positon(images, cv::Rect(0, 0, WIDTH, HEIGHT));
+        color_image.copyTo(color_positon);
+        cv::Mat depth_positon(images, cv::Rect(WIDTH, 0, WIDTH, HEIGHT));
+        depth_image.copyTo(depth_positon);
+
+        cv::Mat lbp;
+        cv::Mat dst = cv::Mat(depth_image.rows, depth_image.cols, CV_8UC3);
+        cvt_ILBP(color_image, lbp);
+        cv::imshow("lbp", lbp);
+
+        for (int x = 0; x < depth_image.cols; x++)
+        {
+            for (int y = 0; y < depth_image.rows; y++)
+            {
+                if (lbp.at<unsigned char>(y, x) != 0)
+                {
+                    dst.at<cv::Vec3b>(y, x) = depth_image.at<cv::Vec3b>(y, x);
+                }
+                else
+                {
+                    dst.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                }
+            }
+        }
+
+        // Find and retrieve IMU data
+        if (rs2::motion_frame accel_frame = frames.first_or_default(RS2_STREAM_ACCEL))
+        {
+            rs2_vector accel_sample = accel_frame.get_motion_data();
+            std::cout << "Accel:" << accel_sample.x << ", " << accel_sample.y << ", " << accel_sample.z << std::endl;
+            //...
+        }
+
+        if (rs2::motion_frame gyro_frame = frames.first_or_default(RS2_STREAM_GYRO))
+        {
+            rs2_vector gyro_sample = gyro_frame.get_motion_data();
+            std::cout << "Gyro:" << gyro_sample.x << ", " << gyro_sample.y << ", " << gyro_sample.z << std::endl;
+            //...
+        }
+
+        cv::imshow("dst", dst);
+        cv::imshow("depth", depth_image);
+        cv::imshow("images", images);
+
+        const int key = cv::waitKey(100);
+        if (key == 'q' /*113*/) // qボタンが押されたとき
+        {
+            /*
+            cv::imwrite("sample_data/dst.jpg", dst);
+            cv::imwrite("sample_data/lbp.jpg", lbp);
+            cv::imwrite("sample_data/depth.jpg", depth_image);
+            cv::imwrite("sample_data/color.jpg", color_image);
+            */
+            break; // whileループから抜ける．
+        }
+    }
+
+    pipe.stop();
+
+    return EXIT_SUCCESS;
+}
+catch (const rs2::error &e)
+{
+    std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+    return EXIT_FAILURE;
+}
+catch (const std::exception &e)
+{
+    std::cerr << e.what() << std::endl;
+    return EXIT_FAILURE;
 }
