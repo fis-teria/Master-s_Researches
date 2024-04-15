@@ -3,5 +3,6 @@
 !/build/calibrate_img
 !/build/tools
 !/build/calibrate_output
+!/build/sample_data
 token
 !.gitignore

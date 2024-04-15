@@ -128,8 +128,8 @@ try
 
     make_LUT(UNIFORMED_LUT);
 
-    int WIDTH = 640;
-    int HEIGHT = 480;
+    int WIDTH = 880;
+    int HEIGHT = 488;
     int FPS = 30;
     rs2::config config;
     config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
