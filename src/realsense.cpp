@@ -128,8 +128,8 @@ try
 
     make_LUT(UNIFORMED_LUT);
 
-    int WIDTH = 880;
-    int HEIGHT = 488;
+    int WIDTH = 848;
+    int HEIGHT = 480;
     int FPS = 30;
     rs2::config config;
     config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
@@ -189,14 +189,14 @@ try
         if (rs2::motion_frame accel_frame = frames.first_or_default(RS2_STREAM_ACCEL))
         {
             rs2_vector accel_sample = accel_frame.get_motion_data();
-            std::cout << "Accel:" << accel_sample.x << ", " << accel_sample.y << ", " << accel_sample.z << std::endl;
+            std::cout << "Accel:" << accel_sample.x << ", " << accel_sample.y << ", " << accel_sample.z;
             //...
         }
 
         if (rs2::motion_frame gyro_frame = frames.first_or_default(RS2_STREAM_GYRO))
         {
             rs2_vector gyro_sample = gyro_frame.get_motion_data();
-            std::cout << "Gyro:" << gyro_sample.x << ", " << gyro_sample.y << ", " << gyro_sample.z << std::endl;
+            std::cout << "\tGyro:" << gyro_sample.x << ", " << gyro_sample.y << ", " << gyro_sample.z << std::endl;
             //...
         }
 
@@ -207,12 +207,12 @@ try
         const int key = cv::waitKey(100);
         if (key == 'q' /*113*/) // qボタンが押されたとき
         {
-            /*
+            ///*
             cv::imwrite("sample_data/dst.jpg", dst);
             cv::imwrite("sample_data/lbp.jpg", lbp);
             cv::imwrite("sample_data/depth.jpg", depth_image);
             cv::imwrite("sample_data/color.jpg", color_image);
-            */
+            //*/
             break; // whileループから抜ける．
         }
     }
