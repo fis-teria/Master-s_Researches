@@ -143,27 +143,45 @@ try
     rs2::colorizer color_map;
     rs2::align align(RS2_STREAM_COLOR);
 
+    std::cout << "start up check";
     for (int i = 0; i < 3; i++)
     {
         rs2::frameset frames = pipe.wait_for_frames();
         cv::waitKey(10);
     }
+    std::cout << "\tOK" << std::endl;
 
     while (true)
     {
+        if(c == 0){
+            std::cout << "get frame" <<std::endl;
+        }
         rs2::frameset frames = pipe.wait_for_frames();
         auto aligned_frames = align.process(frames);
         rs2::video_frame color_frame = aligned_frames.first(RS2_STREAM_COLOR);
         rs2::video_frame depth_frame = aligned_frames.get_depth_frame().apply_filter(color_map);
+        if(c == 0){
+            std::cout << "\tOK" <<std::endl;
+            std::cout << "frame change images";
+        }
 
         cv::Mat color_image(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)color_frame.get_data(), cv::Mat::AUTO_STEP);
         cv::Mat depth_image(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)depth_frame.get_data(), cv::Mat::AUTO_STEP);
+
+        if(c == 0){
+            std::cout << "\tOK" <<std::endl;
+            std::cout << "images copyTo Mat";
+        }
 
         cv::Mat images(cv::Size(2 * WIDTH, HEIGHT), CV_8UC3);
         cv::Mat color_positon(images, cv::Rect(0, 0, WIDTH, HEIGHT));
         color_image.copyTo(color_positon);
         cv::Mat depth_positon(images, cv::Rect(WIDTH, 0, WIDTH, HEIGHT));
         depth_image.copyTo(depth_positon);
+
+        if(c == 0){
+            std::cout << "\tOK" <<std::endl;
+        }
 
         cv::Mat lbp;
         cv::Mat dst = cv::Mat(depth_image.rows, depth_image.cols, CV_8UC3);
