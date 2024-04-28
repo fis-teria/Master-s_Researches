@@ -39,6 +39,30 @@
 
 std::vector<int> UNIFORMED_LUT(256, 0);
 
+std::string make_spath(std::string dir, int var, std::string tag)
+{
+    std::string back;
+    if (var < 10)
+    {
+        back = dir + "/00000" + std::to_string(var) + tag;
+    }
+    else if (var < 100)
+    {
+        back = dir + "/0000" + std::to_string(var) + tag;
+    }
+    else if (var < 1000)
+    {
+        back = dir + "/000" + std::to_string(var) + tag;
+    }
+    else if (var < 10000)
+    {
+        back = dir + "/00" + std::to_string(var) + tag;
+    }
+    std::cout << back << std::endl;
+    return back;
+}
+
+
 int LBP_filter[3][3] = {{64, 32, 16},
                         {128, 0, 8},
                         {1, 2, 4}};
@@ -131,14 +155,23 @@ try
     int WIDTH = 848;
     int HEIGHT = 480;
     int FPS = 30;
+    int c = 0;
+    std::string color_dir = "data/color";
+    std::string depth_dir = "data/depth";
+    std::string edge_dir = "data/edge";
+
     rs2::config config;
+    std::cout << "config images";
     config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
     config.enable_stream(RS2_STREAM_DEPTH, WIDTH, HEIGHT, RS2_FORMAT_Z16, FPS);
-    config.enable_stream(RS2_STREAM_GYRO);
-    config.enable_stream(RS2_STREAM_ACCEL);
+    std::cout << "\tOK" << std::endl;
+    //config.enable_stream(RS2_STREAM_GYRO);
+    //config.enable_stream(RS2_STREAM_ACCEL);
 
+    std::cout << "pipe start";
     rs2::pipeline pipe;
     pipe.start(config);
+    std::cout << "\t OK" << std::endl;
 
     rs2::colorizer color_map;
     rs2::align align(RS2_STREAM_COLOR);
@@ -225,14 +258,20 @@ try
         const int key = cv::waitKey(100);
         if (key == 'q' /*113*/) // qボタンが押されたとき
         {
-            ///*
+            /*
             cv::imwrite("sample_data/dst.jpg", dst);
             cv::imwrite("sample_data/lbp.jpg", lbp);
             cv::imwrite("sample_data/depth.jpg", depth_image);
             cv::imwrite("sample_data/color.jpg", color_image);
             //*/
             break; // whileループから抜ける．
-        }
+      	}
+	std::cout << make_spath(color_dir, c, ".jpg") << std::endl;
+	cv::imwrite(make_spath(color_dir, c, ".jpg"), color_image);
+	cv::imwrite(make_spath(depth_dir, c, ".jpg"), depth_image);
+	cv::imwrite(make_spath(edge_dir, c, ".jpg"), lbp);
+
+	c++;
     }
 
     pipe.stop();
