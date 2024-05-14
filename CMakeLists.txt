@@ -12,9 +12,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "-lstdc++fs -fopenmp")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
-set(CMAKE_CXX_FLAGS "-DPYTHON3_EXECUTABLE=/home/isight/.pyenv/versions/3.9.19/bin/python3")
-set(CMAKE_CXX_FLAGS "-DPYTHON3_INCLUDE_DIR=/home/isight/.pyenv/versions/3.9.19/include/")
-set(CMAKE_CXX_FLAGS "-DPYTHON3_LIBRARY=/home/isight/.pyenv/versions/3.9.19/lib/")
+set(CMAKE_CXX_FLAGS "-DPYTHON3_EXECUTABLE=/home/isight/.pyenv/versions/3.8.19/bin/python3")
+set(CMAKE_CXX_FLAGS "-DPYTHON3_INCLUDE_DIR=/home/isight/.pyenv/versions/3.8.19/include/")
+set(CMAKE_CXX_FLAGS "-DPYTHON3_LIBRARY=/home/isight/.pyenv/versions/3.8.19/lib/")
 #set(CMAKE_CXX_FLAGS "-O2 -Wall")
 
 # インクルードパスの追加
@@ -31,11 +31,11 @@ set(WIN_LIB
 
 set(LINUX_INCLUDE
 	/usr/local/include
-	/home/isight/.pyenv/versions/3.9.19/include/python3.9
+	/home/isight/.pyenv/versions/3.8.19/include/python3.8
 )
 set(LINUX_LIB
 	/usr/local/lib
-	/home/isight/.pyenv/versions/3.9.19/lib
+	/home/isight/.pyenv/versions/3.8.19/lib
 )
 
 if(WIN32)
@@ -46,8 +46,8 @@ else()
 	link_directories(${LINUX_LIB})
 endif()
 # ビルドに関する設定
-set(EXECUTABLES "positioning_MT;match_Tsukuba_LBP;hog_detector;test;sub_image;stereo_camera;calibration;stereoGUI;belief_propagation;attach_img2mp4;test_pm;template_match;camera_check;stereo_calibration;realsense;lbp_test;embeded_python")
-set(DEPENDENT_LIBS opencv_core;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_videoio;opencv_objdetect;opencv_calib3d;opencv_features2d;pthread;realsense2;python3.9)
+set(EXECUTABLES "positioning_MT;match_Tsukuba_LBP;hog_detector;test;sub_image;stereo_camera;calibration;stereoGUI;belief_propagation;attach_img2mp4;test_pm;template_match;camera_check;stereo_calibration;realsense;lbp_test;embeded_python;eraser")
+set(DEPENDENT_LIBS opencv_core;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_videoio;opencv_objdetect;opencv_calib3d;opencv_features2d;pthread;realsense2;python3.8)
 foreach(target IN LISTS EXECUTABLES)
   add_executable(${target} src/${target}.cpp)
   target_link_libraries(${target} ${DEPENDENT_LIBS})

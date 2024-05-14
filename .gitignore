@@ -4,5 +4,6 @@
 !/build/tools
 !/build/calibrate_output
 !/build/sample_data
+!/build/ex_data
 token
 !.gitignore

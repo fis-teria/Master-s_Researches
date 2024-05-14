@@ -4,11 +4,12 @@
     // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        
         {
             "name": "(gdb) build and debug active file on Linux",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/test_pm",
+            "program": "${workspaceFolder}/build/embeded_python",
             "args": [
                 "images/20231231/left/002345.jpg",
                 "images/20231231/right/002345.jpg"

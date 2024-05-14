@@ -80,6 +80,8 @@
         "xstring": "cpp",
         "xtr1common": "cpp",
         "xutility": "cpp",
-        "codecvt": "cpp"
+        "codecvt": "cpp",
+        "forward_list": "cpp",
+        "unordered_set": "cpp"
     }
 }
