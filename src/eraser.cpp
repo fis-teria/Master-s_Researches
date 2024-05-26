@@ -60,31 +60,42 @@ std::string make_spath(std::string dir, int var, std::string tag)
     return back;
 }
 
-cv::Mat cvt_EdgeDepth(const cv::Mat & edge, const cv::Mat &depth, cv::Mat &dst){
+cv::Mat cvt_EdgeDepth(const cv::Mat &edge, const cv::Mat &depth, cv::Mat &dst)
+{
     cv::Mat re = cv::Mat(edge.rows, edge.cols, CV_8UC3);
-    for(int x = 0; x < edge.cols;x++){
-        for(int y = 0; y < edge.rows;y++){
-            if(edge.at<unsigned char>(y,x) <= 10){
-                re.at<cv::Vec3b>(y,x) = cv::Vec3b(0,0,0);
+    for (int x = 0; x < edge.cols; x++)
+    {
+        for (int y = 0; y < edge.rows; y++)
+        {
+            if (edge.at<unsigned char>(y, x) <= 10)
+            {
+                re.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
             }
-            else{
-                re.at<cv::Vec3b>(y,x) = depth.at<cv::Vec3b>(y,x);
+            else
+            {
+                re.at<cv::Vec3b>(y, x) = depth.at<cv::Vec3b>(y, x);
             }
         }
     }
     dst = re.clone();
+    if(dst.empty()){
+        std::cout << "Error dst has not image" << std::endl;
+    }
 }
 
-int main(){
+void obstacle_VHconcat()
+{
     cv::Mat mask, color, edge, depth, edepth, result, obstacle;
-    for(int i = 0; i < 10000;i++ ){
+    for (int i = 0; i < 10000; i++)
+    {
         mask = cv::imread(make_spath("ex_data/mask", i, ".jpg"), 1);
         color = cv::imread(make_spath("ex_data/color", i, ".jpg"), 1);
         edge = cv::imread(make_spath("ex_data/edge", i, ".jpg"), 0);
         depth = cv::imread(make_spath("ex_data/depth", i, ".jpg"), 1);
-        if(mask.empty() || color.empty()){
+        if (mask.empty() || color.empty())
+        {
             break;
-        }        
+        }
 
         cv::resize(mask, mask, cv::Size(848, 480));
         std::cout << mask.size() << " " << color.size() << std::endl;
@@ -92,22 +103,24 @@ int main(){
         result = cv::Mat(2 * mask.rows, 2 * mask.cols, CV_8UC3);
 
         cvt_EdgeDepth(edge, depth, edepth);
-        
 
-        
-        for(int x = 0; x < mask.cols;x++){
-            for(int y = 0; y < mask.rows;y++){
-                if(mask.at<cv::Vec3b>(y,x) != cv::Vec3b(0, 0, 0)){
-                    obstacle.at<cv::Vec3b>(y,x) = cv::Vec3b(0,0,0);
-                    depth.at<cv::Vec3b>(y,x) = cv::Vec3b(0,0,0);
-                    edepth.at<cv::Vec3b>(y,x) = cv::Vec3b(0,0,0);
+        for (int x = 0; x < mask.cols; x++)
+        {
+            for (int y = 0; y < mask.rows; y++)
+            {
+                if (mask.at<cv::Vec3b>(y, x) != cv::Vec3b(0, 0, 0))
+                {
+                    obstacle.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                    depth.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                    edepth.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
                 }
-                else{
-                    obstacle.at<cv::Vec3b>(y,x) = color.at<cv::Vec3b>(y,x);
+                else
+                {
+                    obstacle.at<cv::Vec3b>(y, x) = color.at<cv::Vec3b>(y, x);
                 }
             }
         }
-        
+
         cv::Mat Himg1[2];
         cv::Mat Himg2[2];
         cv::Mat Vimg[2];
@@ -122,13 +135,99 @@ int main(){
         cv::vconcat(Vimg, 2, result);
 
         cv::imshow("a", result);
-        cv::imwrite(make_spath("ex_data/obstacle/", i, ".jpg"), result);
+        //cv::imwrite(make_spath("ex_data/obstacle/", i, ".jpg"), result);
         const int key = cv::waitKey(100);
         if (key == 'q' /*113*/) // qボタンが押されたとき
         {
             break; // whileループから抜ける．
         }
-
     }
+}
+
+void obstacle()
+{
+    cv::Mat mask, color, edge, depth, edepth_af;
+    cv::Mat def_edge = cv::imread("ex_data/edge/000007.jpg", 0);
+    cv::Mat def_depth = cv::imread("ex_data/depth/000007.jpg", 1);
+    cv::Mat img;
+    if (def_edge.empty() || def_depth.empty())
+    {
+        return;
+    }
+    img = cv::Mat(def_edge.rows, def_edge.cols, CV_8UC3);
+    for (int x = 0; x < def_edge.cols; x++)
+    {
+        for (int y = 0; y < def_edge.rows; y++)
+        {
+            if (def_edge.at<unsigned char>(y, x) <= 10)
+            {
+                img.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+            }
+            else
+            {
+                img.at<cv::Vec3b>(y, x) = def_depth.at<cv::Vec3b>(y, x);
+            }
+        }
+    }
+    cvtColor(img, img, cv::COLOR_BGR2GRAY);
+    cv::imshow("aaa", img);
+    std::ofstream ofs("ex_data/result.csv");
+
+    for (int i = 0; i < 10000; i++)
+    {
+        mask = cv::imread(make_spath("ex_data/mask", i, ".jpg"), 1);
+        color = cv::imread(make_spath("ex_data/color", i, ".jpg"), 1);
+        edge = cv::imread(make_spath("ex_data/edge", i, ".jpg"), 0);
+        depth = cv::imread(make_spath("ex_data/depth", i, ".jpg"), 1);
+        if (mask.empty() || color.empty())
+        {
+            break;
+        }
+
+        cv::resize(mask, mask, cv::Size(848, 480));
+        std::cout << mask.size() << " " << color.size() << std::endl;
+
+        cvt_EdgeDepth(edge, depth, edepth_af);
+        ///*
+        for (int x = 0; x < mask.cols; x++)
+        {
+            for (int y = 0; y < mask.rows; y++)
+            {
+                if (mask.at<cv::Vec3b>(y, x) != cv::Vec3b(0, 0, 0))
+                {
+                    depth.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                    edepth_af.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                }
+                else
+                {
+                }
+            }
+        }
+        //*/
+        cv::Mat sl_tim;
+        double min_sl, max_sl;
+        cv::Point p_min_sl, p_max_sl;
+        cvtColor(edepth_af, edepth_af, cv::COLOR_BGR2GRAY);
+        cv::matchTemplate(img, edepth_af(cv::Range(edepth_af.rows / 10, (9 * edepth_af.rows) / 10), cv::Range(edepth_af.cols / 10, (9 * edepth_af.cols) / 10)), sl_tim, cv::TM_CCOEFF_NORMED);
+        cv::minMaxLoc(sl_tim, &min_sl, &max_sl, &p_min_sl, &p_max_sl);
+
+        
+        ofs << i << ", " << max_sl << std::endl;
+
+
+        cv::imshow("a", edepth_af);
+        // cv::imwrite(make_spath("ex_data/obstacle/", i, ".jpg"), result);
+        const int key = cv::waitKey(100);
+        if (key == 'q' /*113*/) // qボタンが押されたとき
+        {
+            break; // whileループから抜ける．
+        }
+    }
+    ofs.close();
+}
+int main()
+{
+    obstacle();
+    //obstacle_VHconcat();
     return 0;
 }
