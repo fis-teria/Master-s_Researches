@@ -21,6 +21,7 @@
 #include <random>
 #include <filesystem>
 #include <chrono>
+#include <sstream>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <boost/foreach.hpp>
@@ -36,6 +37,14 @@
 #else
 #define OMP_PARALLEL_FOR
 #endif
+
+struct DETECT_RECT{
+    int num;
+    int xmin;
+    int xmax;
+    int ymin;
+    int ymax;
+};
 
 std::string make_spath(std::string dir, int var, std::string tag)
 {
@@ -80,6 +89,31 @@ cv::Mat cvt_EdgeDepth(const cv::Mat &edge, const cv::Mat &depth, cv::Mat &dst)
     dst = re.clone();
     if(dst.empty()){
         std::cout << "Error dst has not image" << std::endl;
+    }
+}
+
+void get_detect_rect(std::vector<DETECT_RECT> &vec, std::string fname){
+    std::ifstream ifs(fname);
+    std::string line;
+    std::string str;
+    std::vector<std::string> store(5);
+    DETECT_RECT dr;
+    int st_size = 0;
+    while(getline(ifs, line)){
+        std::istringstream i_stream(line);
+        while (getline(i_stream, str, ',')) {
+            store[st_size] = str;
+            st_size++;
+        }
+        st_size = 0;
+        dr.num = stoi(store[0]);    
+        dr.xmin = stoi(store[1]);    
+        dr.ymin = stoi(store[2]);
+        if(dr.ymin < 0) dr.ymin = 0;    
+        dr.xmax = stoi(store[3]);
+        dr.ymax = stoi(store[4]);
+        vec.push_back(dr);    
+        std::cout << dr.num << " " << dr.xmin << " " << dr.xmax << " " << dr.ymin << " " << dr.ymax << std::endl;
     }
 }
 
@@ -150,11 +184,16 @@ void obstacle()
     cv::Mat def_edge = cv::imread("ex_data/edge/000007.jpg", 0);
     cv::Mat def_depth = cv::imread("ex_data/depth/000007.jpg", 1);
     cv::Mat img;
+    std::vector<DETECT_RECT> dr;
+    int dr_size = 0;
+    get_detect_rect(dr, "ex_data/detect.txt");
     if (def_edge.empty() || def_depth.empty())
     {
         return;
     }
     img = cv::Mat(def_edge.rows, def_edge.cols, CV_8UC3);
+
+
     for (int x = 0; x < def_edge.cols; x++)
     {
         for (int y = 0; y < def_edge.rows; y++)
@@ -189,19 +228,22 @@ void obstacle()
 
         cvt_EdgeDepth(edge, depth, edepth_af);
         ///*
-        for (int x = 0; x < mask.cols; x++)
-        {
-            for (int y = 0; y < mask.rows; y++)
+        if(dr[dr_size].num == i){
+            for (int x = dr[dr_size].xmin; x < dr[dr_size].xmax; x++)
             {
-                if (mask.at<cv::Vec3b>(y, x) != cv::Vec3b(0, 0, 0))
+                for (int y = dr[dr_size].ymin; y < dr[dr_size].ymax; y++)
                 {
-                    depth.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
-                    edepth_af.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
-                }
-                else
-                {
+                    if (mask.at<cv::Vec3b>(y, x) != cv::Vec3b(0, 0, 0))
+                    {
+                        depth.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                        edepth_af.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                    }
+                    else
+                    {
+                    }
                 }
             }
+            dr_size++;
         }
         //*/
         cv::Mat sl_tim;
