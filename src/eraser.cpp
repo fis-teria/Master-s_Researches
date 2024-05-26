@@ -117,6 +117,44 @@ void get_detect_rect(std::vector<DETECT_RECT> &vec, std::string fname){
     }
 }
 
+double template_Match(const cv::Mat &img, const cv::Mat &temp){
+    struct SAD_VAL{
+        int x = 0;
+        int y = 0;
+        double SAD = 0;
+    };
+
+    int base_sad = 0;
+    std::vector<SAD_VAL> sad_vec;
+    SAD_VAL st;
+    int sad = 0;
+
+    for (int x = 0; x < img.cols; x++)
+    {
+        for (int y = 0; y < img.rows; y++)
+        {
+            st.x = x;
+            st.y = y;
+            for(int i = 0; i < temp.cols; i++){
+                for(int j = 0; j < temp.rows; j++){
+                    if(x + i < img.cols && y + j < img.rows){
+                        if(temp.at<unsigned char>(j, i) != 73){
+                        base_sad += img.at<unsigned char>(y+j, x+i);
+                        sad += abs(img.at<unsigned char>(y+j, x+i) - temp.at<unsigned char>(j, i));
+                        }
+                    }
+                }
+            }
+            st.SAD = 1 - (double)(sad/base_sad);
+            sad_vec.push_back(st);
+        }
+    }
+    std::sort(sad_vec.begin(), sad_vec.end(), [](const SAD_VAL &alpha, const SAD_VAL &beta)
+              { return alpha.SAD > beta.SAD; });
+    
+    return sad_vec[0].SAD;
+}
+
 void obstacle_VHconcat()
 {
     cv::Mat mask, color, edge, depth, edepth, result, obstacle;
@@ -210,7 +248,7 @@ void obstacle()
     }
     cvtColor(img, img, cv::COLOR_BGR2GRAY);
     cv::imshow("aaa", img);
-    std::ofstream ofs("ex_data/result.csv");
+    std::ofstream ofs("ex_data/result_2.csv");
 
     for (int i = 0; i < 10000; i++)
     {
@@ -228,6 +266,7 @@ void obstacle()
 
         cvt_EdgeDepth(edge, depth, edepth_af);
         ///*
+        cvtColor(edepth_af, edepth_af, cv::COLOR_BGR2GRAY);
         if(dr[dr_size].num == i){
             for (int x = dr[dr_size].xmin; x < dr[dr_size].xmax; x++)
             {
@@ -236,7 +275,7 @@ void obstacle()
                     if (mask.at<cv::Vec3b>(y, x) != cv::Vec3b(0, 0, 0))
                     {
                         depth.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
-                        edepth_af.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                        edepth_af.at<unsigned char>(y, x) = 73;
                     }
                     else
                     {
@@ -249,9 +288,9 @@ void obstacle()
         cv::Mat sl_tim;
         double min_sl, max_sl;
         cv::Point p_min_sl, p_max_sl;
-        cvtColor(edepth_af, edepth_af, cv::COLOR_BGR2GRAY);
-        cv::matchTemplate(img, edepth_af(cv::Range(edepth_af.rows / 10, (9 * edepth_af.rows) / 10), cv::Range(edepth_af.cols / 10, (9 * edepth_af.cols) / 10)), sl_tim, cv::TM_CCOEFF_NORMED);
-        cv::minMaxLoc(sl_tim, &min_sl, &max_sl, &p_min_sl, &p_max_sl);
+        //cv::matchTemplate(img, edepth_af(cv::Range(edepth_af.rows / 10, (9 * edepth_af.rows) / 10), cv::Range(edepth_af.cols / 10, (9 * edepth_af.cols) / 10)), sl_tim, cv::TM_CCOEFF_NORMED);
+        //cv::minMaxLoc(sl_tim, &min_sl, &max_sl, &p_min_sl, &p_max_sl);
+        max_sl = template_Match(img,edepth_af(cv::Range(edepth_af.rows / 10, (9 * edepth_af.rows) / 10), cv::Range(edepth_af.cols / 10, (9 * edepth_af.cols) / 10)));
 
         
         ofs << i << ", " << max_sl << std::endl;

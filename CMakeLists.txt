@@ -31,11 +31,11 @@ set(WIN_LIB
 
 set(LINUX_INCLUDE
 	/usr/local/include
-	/home/isight/.pyenv/versions/3.8.19/include/python3.8
+	#/home/isight/.pyenv/versions/3.8.19/include/python3.8
 )
 set(LINUX_LIB
 	/usr/local/lib
-	/home/isight/.pyenv/versions/3.8.19/lib
+	#/home/isight/.pyenv/versions/3.8.19/lib
 )
 
 if(WIN32)
@@ -46,8 +46,8 @@ else()
 	link_directories(${LINUX_LIB})
 endif()
 # ビルドに関する設定
-set(EXECUTABLES "positioning_MT;match_Tsukuba_LBP;hog_detector;test;sub_image;stereo_camera;calibration;stereoGUI;belief_propagation;attach_img2mp4;test_pm;template_match;camera_check;stereo_calibration;realsense;lbp_test;embeded_python;eraser;img2mp4")
-set(DEPENDENT_LIBS opencv_core;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_videoio;opencv_objdetect;opencv_calib3d;opencv_features2d;pthread;realsense2;python3.8)
+set(EXECUTABLES "positioning_MT;match_Tsukuba_LBP;hog_detector;test;sub_image;stereo_camera;calibration;stereoGUI;belief_propagation;attach_img2mp4;test_pm;template_match;camera_check;stereo_calibration;realsense;lbp_test;eraser;img2mp4")
+set(DEPENDENT_LIBS opencv_core;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_videoio;opencv_objdetect;opencv_calib3d;opencv_features2d;pthread;realsense2;)
 foreach(target IN LISTS EXECUTABLES)
   add_executable(${target} src/${target}.cpp)
   target_link_libraries(${target} ${DEPENDENT_LIBS})
