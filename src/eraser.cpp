@@ -129,9 +129,9 @@ double template_Match(const cv::Mat &img, const cv::Mat &temp){
     SAD_VAL st;
     int sad = 0;
 
-    for (int x = 0; x < img.cols; x++)
+    for (int x = 0; x < img.cols - temp.cols; x++)
     {
-        for (int y = 0; y < img.rows; y++)
+        for (int y = 0; y < img.rows - temp.rows; y++)
         {
             st.x = x;
             st.y = y;
@@ -145,8 +145,11 @@ double template_Match(const cv::Mat &img, const cv::Mat &temp){
                     }
                 }
             }
-            st.SAD = 1 - (double)(sad/base_sad);
+            st.SAD = sad;
+            base_sad = 0;
+            sad = 0;
             sad_vec.push_back(st);
+            std::cout << sad_vec.back().SAD << " " << "loop fin" << std::endl;
         }
     }
     std::sort(sad_vec.begin(), sad_vec.end(), [](const SAD_VAL &alpha, const SAD_VAL &beta)

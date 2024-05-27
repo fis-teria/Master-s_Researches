@@ -2466,6 +2466,17 @@ void HSV()
     cv::imwrite("images/test_img/hsv.jpg", src);
     cv::waitKey(0);
 }
+
+void reSize(){
+    for(int i = 0; i < 100000;i++){
+        cv::Mat img = cv::imread(make_spath("ex_data/mask", i, ".jpg"), 1);
+        cv::Mat mini;
+
+        cv::resize(img, mini, cv::Size(848, 480));
+
+        cv::imwrite(make_spath("ex_data/mask2", i, ".jpg"), mini);
+    }
+}
 int main()
 {
     unsigned int thread_num = std::thread::hardware_concurrency();
@@ -2482,7 +2493,8 @@ int main()
     // take_image();
     //  change_stereo();
     // sub_image();
-    binaly();
+    //binaly();
     // HSV();
+    reSize();
     return 0;
 }
