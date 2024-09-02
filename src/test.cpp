@@ -20,6 +20,8 @@
 #include <random>
 #include <bitset>
 #include <filesystem>
+#include <zmq.h>
+#include <zmq.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <boost/foreach.hpp>
@@ -2442,7 +2444,8 @@ void binaly()
         std::cout << std::endl;
     }
 
-    for(int n = 0; n < lut.size();n++){
+    for (int n = 0; n < lut.size(); n++)
+    {
         ofs << lut[n] << std::endl;
     }
     ofs.close();
@@ -2467,8 +2470,10 @@ void HSV()
     cv::waitKey(0);
 }
 
-void reSize(){
-    for(int i = 0; i < 100000;i++){
+void reSize()
+{
+    for (int i = 0; i < 100000; i++)
+    {
         cv::Mat img = cv::imread(make_spath("ex_data/mask", i, ".jpg"), 1);
         cv::Mat mini;
 
@@ -2476,6 +2481,139 @@ void reSize(){
 
         cv::imwrite(make_spath("ex_data/mask2", i, ".jpg"), mini);
     }
+}
+
+void img_compression()
+{
+    // img read
+    cv::Mat img = cv::imread(make_spath("ex_data/edge", 30, ".jpg"), 0);
+
+    // compression
+    std::vector<std::vector<long long int>> st(106,std::vector<long long int>(480));
+    int st_x = 0;
+    int st_y = 0;
+    long long int d1 = 0;
+    long long int d2 = 0;
+    clock_t begin = clock();
+    for (int y = 0; y < img.rows; y++)
+    {
+        for (int x = 0; x < img.cols; x++)
+        {
+            d1 *= 256;
+            d2 = img.at<unsigned char>(y,x);
+            d1 = d1 | d2;
+            if ((x + 1) % 8 == 0)
+            {
+                st[st_x][st_y] = d1;
+                st_x++;
+            }
+        }
+        st_x  = 0;
+        st_y++;
+    }
+    clock_t end = clock();
+    print_elapsed_time(begin, end);
+    return;
+}
+
+void my_free(void *data, void *hint)
+{
+    free(data);
+}
+
+int zmq_serve(){
+    cv::Mat image;
+    std::string c_mode = "color";
+    int i;
+
+    //system("../pycoral/code/zeroMQ.py");
+
+    // File Open
+    if( !strcmp(c_mode.c_str(), "color") ){
+        printf("color\n");
+        image = cv::imread("ex_data/color/000030.jpg", 1);
+    }else{
+        printf("gray\n");
+        image = cv::imread("ex_data/color/000030.jpg", 0);
+    }
+
+    // Image Info
+    int32_t  info[3];
+    info[0] = (int32_t)image.rows;
+    info[1] = (int32_t)image.cols;
+    info[2] = (int32_t)image.type();
+
+    // Open ZMQ Connection
+    zmq::context_t context (1);
+    zmq::socket_t socket (context, ZMQ_REQ);
+    socket.connect ("tcp://localhost:5555");
+
+    // Send Rows, Cols, Type
+    for(i=0; i<3; i++ ){
+        zmq::message_t msg ( (void*)&info[i], sizeof(int32_t), NULL  );
+        socket.send(msg, ZMQ_SNDMORE);
+    }
+
+    // Pixel data
+    void* data = malloc(image.total() * image.elemSize());
+    memcpy(data, image.data, image.total() * image.elemSize());
+
+    // Send Pixel data
+    zmq::message_t msg2(data, image.total() * image.elemSize(), my_free, NULL);
+    socket.send(msg2);
+
+    return 0;
+}
+
+int zmq_recive(){
+    int cnt=0;
+    int rows, cols, type;
+    cv::Mat img;
+    void *data;
+
+    // Open ZMQ Connection
+    zmq::context_t context (1);
+    zmq::socket_t socket (context, ZMQ_REP);
+    socket.bind("tcp://*:5556");
+
+    while(1){
+        zmq::message_t rcv_msg;
+        socket.recv(&rcv_msg, 0);
+
+        // Receive Data from ZMQ
+        switch(cnt){
+         case 0:
+            rows = *(int*)rcv_msg.data();
+            break;
+         case 1:
+            cols = *(int*)rcv_msg.data();
+            break;
+         case 2:
+            type = *(int*)rcv_msg.data();
+            break;
+         case 3:
+            data = (void*)rcv_msg.data();
+            printf("rows=%d, cols=%d type=%d\n", rows, cols, type);
+
+            if (type == 2) {
+                 img = cv::Mat(rows, cols, CV_8UC1, data);
+            }else{
+                 img = cv::Mat(rows, cols, CV_8UC3, data);
+            }
+            cv::imshow("recv.bmp", img);
+            cv::waitKey(0);
+            break;
+        }
+
+        if( !rcv_msg.more() ){
+            // No massage any more
+            break;
+        }
+
+        cnt++;
+    }
+
+    return 0;
 }
 int main()
 {
@@ -2493,8 +2631,11 @@ int main()
     // take_image();
     //  change_stereo();
     // sub_image();
-    //binaly();
+    // binaly();
     // HSV();
-    reSize();
+    // reSize();
+    //img_compression();
+    zmq_serve();
+    zmq_recive();
     return 0;
 }

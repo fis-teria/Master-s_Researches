@@ -62,7 +62,6 @@ std::string make_spath(std::string dir, int var, std::string tag)
     return back;
 }
 
-
 int LBP_filter[3][3] = {{64, 32, 16},
                         {128, 0, 8},
                         {1, 2, 4}};
@@ -139,6 +138,80 @@ void make_LUT(std::vector<int> &lut)
     }
     std::cout << "make_LUT end" << std::endl;
 }
+
+class rs2_utils
+{
+private:
+    int WIDTH = 848;
+    int HEIGHT = 480;
+    int FPS = 30;
+    int DEPTH_WIDTH = 848;
+    int DEPTH_HEIGHT = 480;
+    int DEPTH_FPS = 30;
+
+    rs2::config config;
+    rs2::pipeline pipe;
+    rs2::colorizer color_map;
+    
+
+public:
+    cv::Mat color_image;
+    cv::Mat depth_image;
+    rs2_vector gyro;
+    rs2_vector accel;
+
+    rs2_utils()
+    {
+        initialize();
+    }
+
+    void initialize(){
+        std::cout << "config images";
+        config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
+        config.enable_stream(RS2_STREAM_DEPTH, DEPTH_WIDTH, DEPTH_HEIGHT, RS2_FORMAT_Z16, DEPTH_FPS);
+        config.enable_stream(RS2_STREAM_GYRO);
+        config.enable_stream(RS2_STREAM_ACCEL);
+        std::cout << "\tOK" << std::endl;
+    }
+
+    void pipe_start()
+    {
+        pipe.start(this->config);
+    }
+
+    void test_get_frames()
+    {
+        std::cout << "start up check";
+        for (int i = 0; i < 3; i++)
+        {
+            rs2::frameset test_frames = pipe.wait_for_frames();
+            cv::waitKey(10);
+        }
+        std::cout << "\tOK" << std::endl;
+    }
+
+    void get_frames(){
+        rs2::align align(RS2_STREAM_COLOR);
+        rs2::frameset frames = this->pipe.wait_for_frames();
+        auto aligned_frames = align.process(frames);
+
+        rs2::video_frame color_frame = aligned_frames.first(RS2_STREAM_COLOR);
+        rs2::video_frame depth_frame = aligned_frames.get_depth_frame().apply_filter(color_map);
+        
+        color_image = cv::Mat(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)color_frame.get_data(), cv::Mat::AUTO_STEP);
+        depth_image = cv::Mat(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)depth_frame.get_data(), cv::Mat::AUTO_STEP);
+
+        if (rs2::motion_frame accel_frame = frames.first_or_default(RS2_STREAM_ACCEL))
+        {
+            accel = accel_frame.get_motion_data();
+        }
+
+        if (rs2::motion_frame gyro_frame = frames.first_or_default(RS2_STREAM_GYRO))
+        {
+            gyro = gyro_frame.get_motion_data();
+        }
+    }
+};
 // License: Apache 2.0. See LICENSE file in root directory.
 // Copyright(c) 2017 Intel Corporation. All Rights Reserved.
 
@@ -151,10 +224,12 @@ try
 {
 
     make_LUT(UNIFORMED_LUT);
-
     int WIDTH = 848;
     int HEIGHT = 480;
     int FPS = 30;
+    int DEPTH_WIDTH = 848;
+    int DEPTH_HEIGHT = 480;
+    int DEPTH_FPS = 30;
     int c = 0;
     std::string color_dir = "data/color";
     std::string depth_dir = "data/depth";
@@ -163,13 +238,14 @@ try
     rs2::config config;
     std::cout << "config images";
     config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
-    config.enable_stream(RS2_STREAM_DEPTH, WIDTH, HEIGHT, RS2_FORMAT_Z16, FPS);
+    config.enable_stream(RS2_STREAM_DEPTH, DEPTH_WIDTH, DEPTH_HEIGHT, RS2_FORMAT_Z16, DEPTH_FPS);
+    config.enable_stream(RS2_STREAM_GYRO);
+    config.enable_stream(RS2_STREAM_ACCEL);
     std::cout << "\tOK" << std::endl;
-    //config.enable_stream(RS2_STREAM_GYRO);
-    //config.enable_stream(RS2_STREAM_ACCEL);
 
-    std::cout << "pipe start";
+
     rs2::pipeline pipe;
+    std::cout << "pipe start";
     pipe.start(config);
     std::cout << "\t OK" << std::endl;
 
@@ -186,23 +262,26 @@ try
 
     while (true)
     {
-        if(c == 0){
-            std::cout << "get frame" <<std::endl;
+        if (c == 0)
+        {
+            std::cout << "get frame" << std::endl;
         }
         rs2::frameset frames = pipe.wait_for_frames();
         auto aligned_frames = align.process(frames);
         rs2::video_frame color_frame = aligned_frames.first(RS2_STREAM_COLOR);
         rs2::video_frame depth_frame = aligned_frames.get_depth_frame().apply_filter(color_map);
-        if(c == 0){
-            std::cout << "\tOK" <<std::endl;
+        if (c == 0)
+        {
+            std::cout << "\tOK" << std::endl;
             std::cout << "frame change images";
         }
 
         cv::Mat color_image(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)color_frame.get_data(), cv::Mat::AUTO_STEP);
         cv::Mat depth_image(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)depth_frame.get_data(), cv::Mat::AUTO_STEP);
 
-        if(c == 0){
-            std::cout << "\tOK" <<std::endl;
+        if (c == 0)
+        {
+            std::cout << "\tOK" << std::endl;
             std::cout << "images copyTo Mat";
         }
 
@@ -212,8 +291,9 @@ try
         cv::Mat depth_positon(images, cv::Rect(WIDTH, 0, WIDTH, HEIGHT));
         depth_image.copyTo(depth_positon);
 
-        if(c == 0){
-            std::cout << "\tOK" <<std::endl;
+        if (c == 0)
+        {
+            std::cout << "\tOK" << std::endl;
         }
 
         cv::Mat lbp;
@@ -265,13 +345,13 @@ try
             cv::imwrite("sample_data/color.jpg", color_image);
             //*/
             break; // whileループから抜ける．
-      	}
-	std::cout << make_spath(color_dir, c, ".jpg") << std::endl;
-	cv::imwrite(make_spath(color_dir, c, ".jpg"), color_image);
-	cv::imwrite(make_spath(depth_dir, c, ".jpg"), depth_image);
-	cv::imwrite(make_spath(edge_dir, c, ".jpg"), lbp);
+        }
+        std::cout << make_spath(color_dir, c, ".jpg") << std::endl;
+        // cv::imwrite(make_spath(color_dir, c, ".jpg"), color_image);
+        // cv::imwrite(make_spath(depth_dir, c, ".jpg"), depth_image);
+        // cv::imwrite(make_spath(edge_dir, c, ".jpg"), lbp);
 
-	c++;
+        c++;
     }
 
     pipe.stop();

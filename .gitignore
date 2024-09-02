@@ -6,4 +6,5 @@
 !/build/sample_data
 !/build/ex_data
 token
+data
 !.gitignore
