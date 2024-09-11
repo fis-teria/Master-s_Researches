@@ -171,7 +171,7 @@ namespace common
         // Open ZMQ Connection
         zmq::context_t context(1);
         zmq::socket_t socket(context, ZMQ_REQ);
-        socket.connect("tcp://localhost:5555");
+        socket.connect("tcp://192.168.2.124:5555");
 
         // Send Rows, Cols, Type
         for (i = 0; i < 3; i++)
@@ -202,7 +202,7 @@ namespace common
         // Open ZMQ Connection
         zmq::context_t context(1);
         zmq::socket_t socket(context, ZMQ_REQ);
-        socket.connect("tcp://localhost:5557");
+        socket.connect("tcp://192.168.2.124:5558");
 
         // Send Rows, Cols, Type
         for (i = 0; i < info_size; i++)
@@ -217,6 +217,7 @@ namespace common
 
     int zmq_n_recive()
     {
+        std::cout << "start get loop num" << std::endl;
         // Open ZMQ Connection
         zmq::context_t context(1);
         zmq::socket_t socket(context, ZMQ_REP);
@@ -243,7 +244,7 @@ namespace common
         // Open ZMQ Connection
         zmq::context_t context(1);
         zmq::socket_t socket(context, ZMQ_REP);
-        socket.bind("tcp://*:5556");
+        socket.bind("tcp://*:5557");
 
         while (1)
         {

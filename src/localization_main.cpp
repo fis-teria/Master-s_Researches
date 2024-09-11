@@ -41,9 +41,12 @@ void localization(rs2_utils &rs2_utils)
         // cv::imshow("a", rs2_utils.depth_image);
         // cv::waitKey(100);
 
+        std::cout << "image serve\t";
         common::zmq_serve(rs2_utils.color_image, "color");
+        std::cout << "OK" << std::endl;
+        std::cout << "waiting time\t";
         zmq_loop = common::zmq_n_recive();
-        std::cout << "zmp loop " << zmq_loop << std::endl;
+        std::cout << "Finish\nzmp loop " << zmq_loop << std::endl;
         for (int n = 0; n < zmq_loop; n++)
         {
             std::cout << "challenge recive img" << std::endl;
@@ -70,7 +73,7 @@ void localization(rs2_utils &rs2_utils)
 }
 
 void localization_debug(){
-    std::thread th1(system, "python3 ../pycoral/code/main.py");
+    //std::thread th1(system, "python3 ../pycoral/code/main.py");
     std::vector<ResultImage> result;
     while (1)
     {
@@ -82,6 +85,7 @@ void localization_debug(){
         // cv::waitKey(100);
 
         common::zmq_serve(color_image, "color");
+        std::cout << "served img" << std::endl;
         zmq_loop = common::zmq_n_recive();
         std::cout << "zmp loop " << zmq_loop << std::endl;
         for (int n = 0; n < zmq_loop; n++)
@@ -105,7 +109,7 @@ void localization_debug(){
         time_t end = clock();
         common::print_elapsed_time(begin, end);
     }
-    th1.join();
+    //th1.join();
     return;
 }
 

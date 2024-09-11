@@ -11,6 +11,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/localization_main",
             "args": [
+                "0"
             ],
             "stopAtEntry": true,
             "cwd": "${workspaceFolder}/build",
