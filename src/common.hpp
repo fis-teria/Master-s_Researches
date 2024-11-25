@@ -23,11 +23,13 @@
 #include <random>
 #include <bitset>
 #include <filesystem>
+#include <assert.h>
 #include <zmq.h>
 #include <zmq.hpp>
 
 #include "structure.hpp"
 
+// よく使う関数のライブラリ
 namespace common
 {
     std::string make_path(std::string dir, int var, std::string tag)
@@ -63,7 +65,7 @@ namespace common
                             {128, 0, 8},
                             {1, 2, 4}};
 
-    //void cvt_ELBP(const cv::Mat &src, cv::Mat &dst, std::vector<int> &UNIFORMED_LUT)
+    // void cvt_ELBP(const cv::Mat &src, cv::Mat &dst, std::vector<int> &UNIFORMED_LUT)
     void cvt_ELBP(const cv::Mat &src, cv::Mat &dst, std::vector<int> &UNIFORMED_LUT)
     {
         cv::Mat lbp = cv::Mat(src.rows, src.cols, CV_8UC1);
@@ -138,6 +140,37 @@ namespace common
         std::cout << "make_LUT end" << std::endl;
     }
 
+    void cvt_depth_edge_image(cv::Mat &edge_image, cv::Mat &depth_image, cv::Mat &result)
+    {
+        cv::Mat dst = cv::Mat(depth_image.rows, depth_image.cols, CV_8UC3);
+        for (int x = 0; x < depth_image.cols; x++)
+        {
+            for (int y = 0; y < depth_image.rows; y++)
+            {
+                if (edge_image.at<unsigned char>(y, x) >= 10)
+                {
+                    dst.at<cv::Vec3b>(y, x) = depth_image.at<cv::Vec3b>(y, x);
+                }
+                else
+                {
+                    dst.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 0);
+                }
+            }
+        }
+
+        dst.copyTo(result);
+    }
+
+    class connect_monitor_t : public zmq::monitor_t
+    {
+    public:
+        void on_event_connected(const zmq_event_t &event,
+                                const char *addr) override
+        {
+            std::cout << "got connection from " << addr << std::endl;
+        }
+    };
+
     void my_free(void *data, void *hint)
     {
         free(data);
@@ -171,7 +204,8 @@ namespace common
         // Open ZMQ Connection
         zmq::context_t context(1);
         zmq::socket_t socket(context, ZMQ_REQ);
-        socket.connect("tcp://192.168.2.124:5555");
+        // subsystem ip 192.168.1.3
+        socket.connect("tcp://192.168.1.3:5555");
 
         // Send Rows, Cols, Type
         for (i = 0; i < 3; i++)
@@ -202,7 +236,8 @@ namespace common
         // Open ZMQ Connection
         zmq::context_t context(1);
         zmq::socket_t socket(context, ZMQ_REQ);
-        socket.connect("tcp://192.168.2.124:5558");
+        // subsystem ip 192.168.1.3
+        socket.connect("tcp://192.168.1.3:5558");
 
         // Send Rows, Cols, Type
         for (i = 0; i < info_size; i++)
@@ -219,14 +254,43 @@ namespace common
     {
         std::cout << "start get loop num" << std::endl;
         // Open ZMQ Connection
+        int cnt = 0;
+        int n = 0;
+        int check = 0;
         zmq::context_t context(1);
         zmq::socket_t socket(context, ZMQ_REP);
+
+        connect_monitor_t monitor;
+        const int event = ZMQ_EVENT_ALL;
+        monitor.init(socket, "inproc://conmon", ZMQ_EVENT_ALL);
         socket.bind("tcp://*:5556");
 
-        zmq::message_t rcv_msg;
-        socket.recv(&rcv_msg, 0);
+        std::cout << "get recv msg" << std::endl;
 
-        int n = *(int *)rcv_msg.data();
+        while (1)
+        {
+            zmq::message_t rcv_msg;
+            socket.recv(&rcv_msg, 0);
+            std::cout << "get msg" << std::endl;
+            switch (cnt)
+            {
+            case 0:
+                n = *(int *)rcv_msg.data();
+                break;
+            case 1:
+                check = *(int *)rcv_msg.data();
+                std::cout << "get loop n complete" << std::endl;
+                break;
+            }
+
+            if (!rcv_msg.more())
+            {
+                // No massage any more
+                break;
+            }
+
+            cnt++;
+        }
 
         return n;
     }
@@ -290,16 +354,16 @@ namespace common
                 break;
             case 8:
                 id = *(int *)rcv_msg.data();
-                
-                cv::resize(img, img, cv::Size(xmax-xmin, ymax-ymin));
-                cv::imshow("recv.bmp", img);
+
+                cv::resize(img, img, cv::Size(xmax - xmin, ymax - ymin));
+                // cv::imshow("recv.bmp", img);
                 img.copyTo(result.image);
                 result.xmin = xmin;
                 result.xmax = xmax;
                 result.ymin = ymin;
                 result.ymax = ymax;
                 result.id = id;
-                cv::waitKey(100);
+                // cv::waitKey(10);
                 break;
             }
 
@@ -314,5 +378,6 @@ namespace common
 
         return result;
     }
+
 }
 #endif

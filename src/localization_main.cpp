@@ -30,7 +30,10 @@
 void localization(rs2_utils &rs2_utils)
 {
     //std::thread th1(system, "python3 ../pycoral/code/main.py");
+    cv::Mat elbp_img, dst_img;
     std::vector<ResultImage> result;
+    std::vector<int> lut(256, 0);
+    common::make_LUT(lut);
     while (1)
     {
         time_t begin = clock();
@@ -41,7 +44,12 @@ void localization(rs2_utils &rs2_utils)
         // cv::imshow("a", rs2_utils.depth_image);
         // cv::waitKey(100);
 
+        //cvt ELBP Image
+        common::cvt_ELBP(rs2_utils.color_image, elbp_img, lut);
+        common::cvt_depth_edge_image(elbp_img, rs2_utils.depth_image, dst_img);
+
         std::cout << "image serve\t";
+
         common::zmq_serve(rs2_utils.color_image, "color");
         std::cout << "OK" << std::endl;
         std::cout << "waiting time\t";
@@ -59,12 +67,13 @@ void localization(rs2_utils &rs2_utils)
         ///*
         for (int i = 0; i < zmq_loop; i++)
         {
-            std::string win_name = "win_" + std::to_string(i);
-            cv::imshow(win_name, result[i].image);
+            //std::string win_name = "win_" + std::to_string(i);
+            //cv::imshow(win_name, result[i].image);
+            result[i].get_data();
         }
-        cv::waitKey(10);
+        //cv::waitKey(10);
         //*/
-        std::cout << "--------------End Localization--------------" << std::endl;
+        std::cout << "---------------End Localization---------------" << std::endl;
         time_t end = clock();
         common::print_elapsed_time(begin, end);
     }

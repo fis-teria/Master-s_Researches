@@ -9,9 +9,8 @@
             "name": "(gdb) build and debug active file on Linux",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/localization_main",
+            "program": "${workspaceFolder}/build/test_zmq",
             "args": [
-                "0"
             ],
             "stopAtEntry": true,
             "cwd": "${workspaceFolder}/build",

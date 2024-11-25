@@ -117,7 +117,7 @@ void cvt_ILBP(const cv::Mat &src, cv::Mat &dst)
 void make_LUT(std::vector<int> &lut)
 {
     std::cout << "make_LUT start" << std::endl;
-    std::ifstream ifs("tools/Uniformed_LBP_Table.txt");
+    std::ifstream ifs("../data/tools/Uniformed_LBP_Table.txt");
     std::string str;
     int count = 0;
     if (ifs.fail())
@@ -231,20 +231,25 @@ try
     int DEPTH_HEIGHT = 480;
     int DEPTH_FPS = 30;
     int c = 0;
-    std::string color_dir = "data/color";
-    std::string depth_dir = "data/depth";
-    std::string edge_dir = "data/edge";
+    std::string parent_dir = argv[1];
+    std::string color_dir = parent_dir + "color";
+    std::string depth_dir = parent_dir + "depth";
+    std::string edge_dir = parent_dir + "edge";
+    std::string dst_dir = parent_dir + "dst";
+    std::cout << color_dir << std::endl;
 
+
+    rs2::context ctx;
     rs2::config config;
     std::cout << "config images";
     config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
     config.enable_stream(RS2_STREAM_DEPTH, DEPTH_WIDTH, DEPTH_HEIGHT, RS2_FORMAT_Z16, DEPTH_FPS);
-    config.enable_stream(RS2_STREAM_GYRO);
-    config.enable_stream(RS2_STREAM_ACCEL);
+    //config.enable_stream(RS2_STREAM_GYRO);
+    //config.enable_stream(RS2_STREAM_ACCEL);
     std::cout << "\tOK" << std::endl;
 
-
-    rs2::pipeline pipe;
+    cv::waitKey(100);
+    rs2::pipeline pipe(ctx);
     std::cout << "pipe start";
     pipe.start(config);
     std::cout << "\t OK" << std::endl;
@@ -333,7 +338,7 @@ try
 
         cv::imshow("dst", dst);
         cv::imshow("depth", depth_image);
-        cv::imshow("images", images);
+        //cv::imshow("images", images);
 
         const int key = cv::waitKey(100);
         if (key == 'q' /*113*/) // qボタンが押されたとき
@@ -347,10 +352,12 @@ try
             break; // whileループから抜ける．
         }
         std::cout << make_spath(color_dir, c, ".jpg") << std::endl;
-        // cv::imwrite(make_spath(color_dir, c, ".jpg"), color_image);
-        // cv::imwrite(make_spath(depth_dir, c, ".jpg"), depth_image);
-        // cv::imwrite(make_spath(edge_dir, c, ".jpg"), lbp);
-
+        /*
+	cv::imwrite(make_spath(color_dir, c, ".jpg"), color_image);
+        cv::imwrite(make_spath(depth_dir, c, ".jpg"), depth_image);
+        cv::imwrite(make_spath(edge_dir, c, ".jpg"), lbp);
+	cv::imwrite(make_spath(dst_dir, c, ".jpg"), dst);
+	//*/
         c++;
     }
 

@@ -50,7 +50,7 @@ else()
 	link_directories(${LINUX_LIB})
 endif()
 # ビルドに関する設定
-set(EXECUTABLES "realsense;test;eraser;img2cvt;img2mp4;attach_img2mp4;mv2img;embeded_python;localization_main")
+set(EXECUTABLES "realsense;test_zmq;img_sort;img2cvt;img2mp4;attach_img2mp4;mv2img;embeded_python;localization_main")
 set(DEPENDENT_LIBS opencv_core;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_videoio;opencv_objdetect;opencv_calib3d;opencv_features2d;pthread;realsense2;python3.8;zmq)
 foreach(target IN LISTS EXECUTABLES)
   add_executable(${target} src/${target}.cpp)
