@@ -29,7 +29,7 @@ end 2469
 1001_1435
 start 27
 end 4548
-*/
+*/cosine_det_img,cosine_seg_img,cosine_det_dedge,cosine_seg_dedge,cosine_ip_img,cosine_ip_dedge
 struct resulT
 {
     double max;

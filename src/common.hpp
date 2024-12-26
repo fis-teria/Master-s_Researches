@@ -55,6 +55,27 @@ namespace common
         return back;
     }
 
+    int read_save(std::string SAVE)
+    {
+        int save_num;
+        std::ifstream ifs;
+
+        ifs = std::ifstream(SAVE.c_str());
+        std::string str;
+        getline(ifs, str);
+        std::cout << str << std::endl;
+        save_num = atoi(str.c_str());
+        return save_num;
+    }
+
+    void save(std::string SAVE,int m)
+    {
+        std::ofstream savefile;
+        savefile = std::ofstream(SAVE.c_str());
+        savefile << m << std::endl;
+        savefile.close();
+    }
+
     void print_elapsed_time(clock_t begin, clock_t end)
     {
         float elapsed = (float)(end - begin) / CLOCKS_PER_SEC;

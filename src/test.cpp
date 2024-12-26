@@ -804,7 +804,7 @@ double sim_C_BM(const cv::Mat &block, const cv::Mat &src, int origin_x, int orig
         if (x < src.cols && x > -1)
         {
             // std::cout << "matching search point (" << x << " " << y << ")" << std::endl;
-            match_Result.resize(BM_size + 1);
+            match_Result.resize(BM_size +database[loop_count - 1].frame_num 1);
             match_Result[BM_size].x = x;
             match_Result[BM_size].y = y;
 
