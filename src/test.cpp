@@ -2489,7 +2489,7 @@ void img_compression()
     cv::Mat img = cv::imread(make_spath("ex_data/edge", 30, ".jpg"), 0);
 
     // compression
-    std::vector<std::vector<long long int>> st(106,std::vector<long long int>(480));
+    std::vector<std::vector<long long int>> st(106, std::vector<long long int>(480));
     int st_x = 0;
     int st_y = 0;
     long long int d1 = 0;
@@ -2500,7 +2500,7 @@ void img_compression()
         for (int x = 0; x < img.cols; x++)
         {
             d1 *= 256;
-            d2 = img.at<unsigned char>(y,x);
+            d2 = img.at<unsigned char>(y, x);
             d1 = d1 | d2;
             if ((x + 1) % 8 == 0)
             {
@@ -2508,7 +2508,7 @@ void img_compression()
                 st_x++;
             }
         }
-        st_x  = 0;
+        st_x = 0;
         st_y++;
     }
     clock_t end = clock();
@@ -2521,41 +2521,46 @@ void my_free(void *data, void *hint)
     free(data);
 }
 
-int zmq_serve(){
+int zmq_serve()
+{
     cv::Mat image;
     std::string c_mode = "color";
     int i;
 
-    //system("../pycoral/code/zeroMQ.py");
+    // system("../pycoral/code/zeroMQ.py");
 
     // File Open
-    if( !strcmp(c_mode.c_str(), "color") ){
+    if (!strcmp(c_mode.c_str(), "color"))
+    {
         printf("color\n");
         image = cv::imread("ex_data/color/000030.jpg", 1);
-    }else{
+    }
+    else
+    {
         printf("gray\n");
         image = cv::imread("ex_data/color/000030.jpg", 0);
     }
 
     // Image Info
-    int32_t  info[3];
+    int32_t info[3];
     info[0] = (int32_t)image.rows;
     info[1] = (int32_t)image.cols;
     info[2] = (int32_t)image.type();
 
     // Open ZMQ Connection
-    zmq::context_t context (1);
-    zmq::socket_t socket (context, ZMQ_REQ);
-    socket.connect ("tcp://localhost:5555");
+    zmq::context_t context(1);
+    zmq::socket_t socket(context, ZMQ_REQ);
+    socket.connect("tcp://localhost:5555");
 
     // Send Rows, Cols, Type
-    for(i=0; i<3; i++ ){
-        zmq::message_t msg ( (void*)&info[i], sizeof(int32_t), NULL  );
+    for (i = 0; i < 3; i++)
+    {
+        zmq::message_t msg((void *)&info[i], sizeof(int32_t), NULL);
         socket.send(msg, ZMQ_SNDMORE);
     }
 
     // Pixel data
-    void* data = malloc(image.total() * image.elemSize());
+    void *data = malloc(image.total() * image.elemSize());
     memcpy(data, image.data, image.total() * image.elemSize());
 
     // Send Pixel data
@@ -2565,47 +2570,54 @@ int zmq_serve(){
     return 0;
 }
 
-int zmq_recive(){
-    int cnt=0;
+int zmq_recive()
+{
+    int cnt = 0;
     int rows, cols, type;
     cv::Mat img;
     void *data;
 
     // Open ZMQ Connection
-    zmq::context_t context (1);
-    zmq::socket_t socket (context, ZMQ_REP);
+    zmq::context_t context(1);
+    zmq::socket_t socket(context, ZMQ_REP);
     socket.bind("tcp://*:5556");
 
-    while(1){
+    while (1)
+    {
         zmq::message_t rcv_msg;
         socket.recv(&rcv_msg, 0);
 
         // Receive Data from ZMQ
-        switch(cnt){
-         case 0:
-            rows = *(int*)rcv_msg.data();
+        switch (cnt)
+        {
+        case 0:
+            rows = *(int *)rcv_msg.data();
             break;
-         case 1:
-            cols = *(int*)rcv_msg.data();
+        case 1:
+            cols = *(int *)rcv_msg.data();
             break;
-         case 2:
-            type = *(int*)rcv_msg.data();
+        case 2:
+            type = *(int *)rcv_msg.data();
             break;
-         case 3:
-            data = (void*)rcv_msg.data();
+        case 3:
+            data = (void *)rcv_msg.data();
             printf("rows=%d, cols=%d type=%d\n", rows, cols, type);
 
-            if (type == 2) {
-                 img = cv::Mat(rows, cols, CV_8UC1, data);
-            }else{
-                 img = cv::Mat(rows, cols, CV_8UC3, data);
+            if (type == 2)
+            {
+                img = cv::Mat(rows, cols, CV_8UC1, data);
+            }
+            else
+            {
+                img = cv::Mat(rows, cols, CV_8UC3, data);
             }
             cv::imshow("recv.bmp", img);
             cv::waitKey(0);
             break;
         }
 
-        if( !rcv_msg.more() ){
+        if (!rcv_msg.more())
+        {
             // No massage any more
             break;
         }
@@ -2614,6 +2626,25 @@ int zmq_recive(){
     }
 
     return 0;
+}
+
+void img_normalize()
+{
+    cv::Mat img = cv::imread("../data/images/seqslam/old/day_run4-3_color.jpg", 0);
+    cv::Mat a;
+    for (int x = 0; x < img.cols; x++)
+    {
+        int before = x - 10;
+        if (before < 0)
+        {
+            before = 0;
+        }
+        img.col(x).copyTo(a);
+        //cv::normalize(a(cv::Range(before, x), cv::Range::all()), a(cv::Range(before, x), cv::Range::all()), 0, 255, cv::NORM_MINMAX, CV_8UC1);
+        cv::normalize(img.col(x), img.col(x), 0, 255, cv::NORM_MINMAX, CV_8UC1);
+        //a.copyTo(img.col(x));
+    }
+    cv::imwrite("../data/images/seqslam/old/day_run4-3_color_norm.jpg", img);
 }
 int main()
 {
@@ -2634,8 +2665,9 @@ int main()
     // binaly();
     // HSV();
     // reSize();
-    //img_compression();
-    zmq_serve();
-    zmq_recive();
+    // img_compression();
+    // zmq_serve();
+    // zmq_recive();
+    img_normalize();
     return 0;
 }

@@ -1,5 +1,6 @@
 #include <opencv2/opencv.hpp>
-#include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
+#include <librealsense2/rs.hpp>   // Include RealSense Cross Platform API
+#include "librealsense2/rsutil.h" // Include RealSense Cross Platform API
 
 #include <cstdio>
 #include <iostream>
@@ -152,7 +153,7 @@ private:
     rs2::config config;
     rs2::pipeline pipe;
     rs2::colorizer color_map;
-    
+    rs2_intrinsics intr;
 
 public:
     cv::Mat color_image;
@@ -165,7 +166,8 @@ public:
         initialize();
     }
 
-    void initialize(){
+    void initialize()
+    {
         std::cout << "config images";
         config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
         config.enable_stream(RS2_STREAM_DEPTH, DEPTH_WIDTH, DEPTH_HEIGHT, RS2_FORMAT_Z16, DEPTH_FPS);
@@ -189,28 +191,6 @@ public:
         }
         std::cout << "\tOK" << std::endl;
     }
-
-    void get_frames(){
-        rs2::align align(RS2_STREAM_COLOR);
-        rs2::frameset frames = this->pipe.wait_for_frames();
-        auto aligned_frames = align.process(frames);
-
-        rs2::video_frame color_frame = aligned_frames.first(RS2_STREAM_COLOR);
-        rs2::video_frame depth_frame = aligned_frames.get_depth_frame().apply_filter(color_map);
-        
-        color_image = cv::Mat(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)color_frame.get_data(), cv::Mat::AUTO_STEP);
-        depth_image = cv::Mat(cv::Size(WIDTH, HEIGHT), CV_8UC3, (void *)depth_frame.get_data(), cv::Mat::AUTO_STEP);
-
-        if (rs2::motion_frame accel_frame = frames.first_or_default(RS2_STREAM_ACCEL))
-        {
-            accel = accel_frame.get_motion_data();
-        }
-
-        if (rs2::motion_frame gyro_frame = frames.first_or_default(RS2_STREAM_GYRO))
-        {
-            gyro = gyro_frame.get_motion_data();
-        }
-    }
 };
 // License: Apache 2.0. See LICENSE file in root directory.
 // Copyright(c) 2017 Intel Corporation. All Rights Reserved.
@@ -227,8 +207,8 @@ try
     int WIDTH = 848;
     int HEIGHT = 480;
     int FPS = 30;
-    int DEPTH_WIDTH = 848;
-    int DEPTH_HEIGHT = 480;
+    int DEPTH_WIDTH = 1280;
+    int DEPTH_HEIGHT = 720;
     int DEPTH_FPS = 30;
     int c = 0;
     std::string parent_dir = argv[1];
@@ -238,20 +218,20 @@ try
     std::string dst_dir = parent_dir + "dst";
     std::cout << color_dir << std::endl;
 
-
     rs2::context ctx;
     rs2::config config;
+    rs2_intrinsics intr;
     std::cout << "config images";
     config.enable_stream(RS2_STREAM_COLOR, WIDTH, HEIGHT, RS2_FORMAT_BGR8, FPS);
     config.enable_stream(RS2_STREAM_DEPTH, DEPTH_WIDTH, DEPTH_HEIGHT, RS2_FORMAT_Z16, DEPTH_FPS);
-    //config.enable_stream(RS2_STREAM_GYRO);
-    //config.enable_stream(RS2_STREAM_ACCEL);
+    // config.enable_stream(RS2_STREAM_GYRO);
+    // config.enable_stream(RS2_STREAM_ACCEL);
     std::cout << "\tOK" << std::endl;
 
     cv::waitKey(100);
     rs2::pipeline pipe(ctx);
     std::cout << "pipe start";
-    pipe.start(config);
+    rs2::pipeline_profile profile = pipe.start(config);
     std::cout << "\t OK" << std::endl;
 
     rs2::colorizer color_map;
@@ -265,6 +245,19 @@ try
     }
     std::cout << "\tOK" << std::endl;
 
+    auto stream_profile = profile.get_stream(RS2_STREAM_COLOR).as<rs2::video_stream_profile>();
+    intr = stream_profile.get_intrinsics();
+
+    std::cout << "Realsense Internal Parameters" << std::endl;
+    std::cout << "focus x " << intr.fx << std::endl;
+    std::cout << "focus y " << intr.fy << std::endl;
+    std::cout << "height width " << intr.height << " " << intr.width << std::endl;
+    std::cout << "ppx ppy " << intr.ppx << " " << intr.ppy << std::endl;
+    std::cout << "model " << intr.model << std::endl;
+    for (int i = 0; i < 5; i++)
+    {
+        std::cout << "coeffs " << i << " " << intr.coeffs[i] << std::endl;
+    }
     while (true)
     {
         if (c == 0)
@@ -273,8 +266,20 @@ try
         }
         rs2::frameset frames = pipe.wait_for_frames();
         auto aligned_frames = align.process(frames);
+
         rs2::video_frame color_frame = aligned_frames.first(RS2_STREAM_COLOR);
+        rs2::depth_frame depth  =aligned_frames.get_depth_frame();
         rs2::video_frame depth_frame = aligned_frames.get_depth_frame().apply_filter(color_map);
+
+        int x_pix = DEPTH_WIDTH / 2;
+        int y_pix = DEPTH_HEIGHT / 2;
+        const float pixel[] = {(float)x_pix, (float)y_pix};
+        float point[3];
+        //float dis = depth_image.at<cv::Vec3b>(y_pix, x_pix)[0] * (10050 / 130);
+
+        rs2_deproject_pixel_to_point(point, &intr, pixel, depth.get_distance(x_pix, y_pix));
+        std::cout << "[ " << x_pix << "px, " << y_pix << "px ] = " << "[ " << point[0] << ", " << point[1] << ", " << point[2] << "] \r";
+        
         if (c == 0)
         {
             std::cout << "\tOK" << std::endl;
@@ -338,7 +343,7 @@ try
 
         cv::imshow("dst", dst);
         cv::imshow("depth", depth_image);
-        //cv::imshow("images", images);
+        // cv::imshow("images", images);
 
         const int key = cv::waitKey(100);
         if (key == 'q' /*113*/) // qボタンが押されたとき
@@ -353,11 +358,11 @@ try
         }
         std::cout << make_spath(color_dir, c, ".jpg") << std::endl;
         /*
-	cv::imwrite(make_spath(color_dir, c, ".jpg"), color_image);
+    cv::imwrite(make_spath(color_dir, c, ".jpg"), color_image);
         cv::imwrite(make_spath(depth_dir, c, ".jpg"), depth_image);
         cv::imwrite(make_spath(edge_dir, c, ".jpg"), lbp);
-	cv::imwrite(make_spath(dst_dir, c, ".jpg"), dst);
-	//*/
+    cv::imwrite(make_spath(dst_dir, c, ".jpg"), dst);
+    //*/
         c++;
     }
 

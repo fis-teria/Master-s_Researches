@@ -2,6 +2,8 @@
 #define INCLUDE_COMMON_HPP
 
 #include <opencv2/opencv.hpp>
+#include <librealsense2/rs.hpp>
+#include <librealsense2/rsutil.h>
 
 #include <cstdio>
 #include <iostream>
@@ -51,7 +53,7 @@ namespace common
         {
             back = dir + "/00" + std::to_string(var) + tag;
         }
-        std::cout << back << std::endl;
+        //std::cout << back << std::endl;
         return back;
     }
 
@@ -400,5 +402,133 @@ namespace common
         return result;
     }
 
+    //librealsense2/rsutil.h
+    void deproject_pixel_to_point(float point[3], const struct rs2_intrinsics *intrin, const float pixel[2], float depth)
+    {
+        assert(intrin->model != RS2_DISTORTION_MODIFIED_BROWN_CONRADY); // Cannot deproject from a forward-distorted image
+        // assert(intrin->model != RS2_DISTORTION_BROWN_CONRADY); // Cannot deproject to an brown conrady model
+
+        float x = (pixel[0] - intrin->ppx) / intrin->fx;
+        float y = (pixel[1] - intrin->ppy) / intrin->fy;
+
+        float xo = x;
+        float yo = y;
+
+        if (intrin->model == RS2_DISTORTION_INVERSE_BROWN_CONRADY)
+        {
+            // need to loop until convergence
+            // 10 iterations determined empirically
+            for (int i = 0; i < 10; i++)
+            {
+                float r2 = x * x + y * y;
+                float icdist = (float)1 / (float)(1 + ((intrin->coeffs[4] * r2 + intrin->coeffs[1]) * r2 + intrin->coeffs[0]) * r2);
+                float xq = x / icdist;
+                float yq = y / icdist;
+                float delta_x = 2 * intrin->coeffs[2] * xq * yq + intrin->coeffs[3] * (r2 + 2 * xq * xq);
+                float delta_y = 2 * intrin->coeffs[3] * xq * yq + intrin->coeffs[2] * (r2 + 2 * yq * yq);
+                x = (xo - delta_x) * icdist;
+                y = (yo - delta_y) * icdist;
+            }
+        }
+        if (intrin->model == RS2_DISTORTION_BROWN_CONRADY)
+        {
+            // need to loop until convergence
+            // 10 iterations determined empirically
+            for (int i = 0; i < 10; i++)
+            {
+                float r2 = x * x + y * y;
+                float icdist = (float)1 / (float)(1 + ((intrin->coeffs[4] * r2 + intrin->coeffs[1]) * r2 + intrin->coeffs[0]) * r2);
+                float delta_x = 2 * intrin->coeffs[2] * x * y + intrin->coeffs[3] * (r2 + 2 * x * x);
+                float delta_y = 2 * intrin->coeffs[3] * x * y + intrin->coeffs[2] * (r2 + 2 * y * y);
+                x = (xo - delta_x) * icdist;
+                y = (yo - delta_y) * icdist;
+            }
+        }
+        if (intrin->model == RS2_DISTORTION_KANNALA_BRANDT4)
+        {
+            float rd = sqrtf(x * x + y * y);
+            if (rd < FLT_EPSILON)
+            {
+                rd = FLT_EPSILON;
+            }
+
+            float theta = rd;
+            float theta2 = rd * rd;
+            for (int i = 0; i < 4; i++)
+            {
+                float f = theta * (1 + theta2 * (intrin->coeffs[0] + theta2 * (intrin->coeffs[1] + theta2 * (intrin->coeffs[2] + theta2 * intrin->coeffs[3])))) - rd;
+                if (fabs(f) < FLT_EPSILON)
+                {
+                    break;
+                }
+                float df = 1 + theta2 * (3 * intrin->coeffs[0] + theta2 * (5 * intrin->coeffs[1] + theta2 * (7 * intrin->coeffs[2] + 9 * theta2 * intrin->coeffs[3])));
+                theta -= f / df;
+                theta2 = theta * theta;
+            }
+            float r = tan(theta);
+            x *= r / rd;
+            y *= r / rd;
+        }
+        if (intrin->model == RS2_DISTORTION_FTHETA)
+        {
+            float rd = sqrtf(x * x + y * y);
+            if (rd < FLT_EPSILON)
+            {
+                rd = FLT_EPSILON;
+            }
+            float r = (float)(tan(intrin->coeffs[0] * rd) / atan(2 * tan(intrin->coeffs[0] / 2.0f)));
+            x *= r / rd;
+            y *= r / rd;
+        }
+
+        point[0] = depth * x;
+        point[1] = depth * y;
+        point[2] = depth;
+    }
+
+    void doDeprojectPosition(const cv::Mat &depth_image, int x, int  y, float result[3])
+    {
+        /****************
+        Realsense Internal Parameters
+        focus x 614.467
+        focus y 614.422
+        height width 480 848
+        ppx ppy 417.145 242.827
+        model Inverse Brown Conrady
+        coeffs 0 0
+        coeffs 1 0
+        coeffs 2 0
+        coeffs 3 0
+        coeffs 4 0
+        ****************/
+        rs2_intrinsics intr;
+        intr.fx = 614.467;
+        intr.fy = 614.422;
+        intr.height = 480;
+        intr.width = 848;
+        intr.ppx = 417.145;
+        intr.ppy = 242.827;
+        intr.coeffs[0] = 0;
+        intr.coeffs[1] = 0;
+        intr.coeffs[2] = 0;
+        intr.coeffs[3] = 0;
+        intr.coeffs[4] = 0;
+        intr.model = RS2_DISTORTION_INVERSE_BROWN_CONRADY;
+
+        int x_pix = x;
+        int y_pix = y;
+        const float pixel[] = {(float)x_pix, (float)y_pix};
+        float point[3];
+        float dis = depth_image.at<cv::Vec3b>(y_pix, x_pix)[0] * (3050 / 130);
+
+        deproject_pixel_to_point(point, &intr, pixel, dis);
+
+        std::cout << "[ " << x_pix << "px, " << y_pix << "px , "<< dis <<" ] = " << "[ " << point[0] << ", " << point[1] << ", " << point[2] << "]"<< std::endl;;
+
+        result[0] = point[0];
+        result[1] = point[1];
+        result[2] = point[2];
+
+    }
 }
 #endif
